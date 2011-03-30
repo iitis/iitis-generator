@@ -1,0 +1,4 @@
+generator
+version.h
+.*.swp
+*.o

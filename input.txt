@@ -1,0 +1,11 @@
+#
+# Przykładowy plik wejściowy
+#
+# format:
+# czas bssid src dst type params
+
+# zacznij od ramki 7 -> 6 długości 10 w czasie 1s 500ms
+1.500000 0 7 6 packet 10
+
+# "odpowiedź" 1ms i 250us później
+1.501250 0 6 7 packet 10
