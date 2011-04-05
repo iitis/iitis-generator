@@ -23,27 +23,12 @@ int mgi_inject(struct mg *mg, int ifidx,
 	uint16_t ether_type, void *data, size_t len)
 {
 	int ret;
-	uint16_t seqle;
 	static uint16_t seq = 0;
 
 	/* radiotap header
 	 * NOTE: this is always LSB!
 	 * SEE: Documentation/networking/mac80211-injection.txt
-	 * SEE: include/net/ieee80211_radiotap.h
-	 * TODO: setup radiotap headers for proper channel, antenna, rate, etc. - the packet injection
-	 *       framework touches only 3 of RADIOTAP_FLAGS, but more might be needed by eg. ath9k
-	 *       see Documentation/networking/mac80211-injection.txt */
-#if 0
-	static uint8_t rtap_hdr[] = {
-		0x00, 0x00,             /* radiotap version */
-		0x0e, 0x00,             /* radiotap length */
-		0x02, 0xc0, 0x00, 0x00, /* bitmap: flags, tx and rx flags */
-		0x00,                   /* RADIOTAP_FLAGS */
-		0x00,                   /* padding TODO: why? */
-		0x00, 0x00,             /* RADIOTAP_RX_FLAGS */
-		0x00, 0x00,             /* RADIOTAP_TX_FLAGS */
-	};
-#endif
+	 * SEE: include/net/ieee80211_radiotap.h */
 	static uint8_t rtap_hdr[] = {
 		0x00, 0x00,             /* radiotap version */
 		0x08, 0x00,             /* radiotap length */
@@ -118,6 +103,18 @@ int mgi_inject(struct mg *mg, int ifidx,
 	} else {
 		return ret;
 	}
+}
+
+int mgi_sniff(struct mg *mg, int ifidx, uint8_t pkt[PKTSIZE])
+{
+	int ret;
+
+	ret = recvfrom(mg->inject.fds[ifidx], pkt, PKTSIZE, MSG_DONTWAIT, NULL, NULL);
+
+	if (ret > 0)
+		return ret;
+
+	return (errno == EAGAIN ? 0 : -1);
 }
 
 int mgi_init(struct mg *mg)

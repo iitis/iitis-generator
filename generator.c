@@ -102,15 +102,23 @@ int main(int argc, char *argv[])
 	if (mgi_init(mg) <= 0)
 		die("no available interfaces found");
 
-	struct ether_addr bssid = { 0x10, 0x20, 0x30, 0x40, 0x50, 0x01 };
-	struct ether_addr dst   = { 0x00, 0x0c, 0x42, 0x64, 0xc4, 0x78 };
-	struct ether_addr src   = { 0x00, 0x0c, 0x42, 0x64, 0xb8, 0x67 };
+	struct ether_addr bssid = { 0x10, 0x20, 0x30, 0x40, 0x50, 0x02 };
+	struct ether_addr dst   = { 0x00, 0xfc, 0x42, 0x64, 0xc4, 0x78 };
+	struct ether_addr src   = { 0x00, 0x8c, 0x42, 0x64, 0xb8, 0x67 };
 	char buf[8];
 
-	for (int i = 0; i < 9; i++) {
+	for (int i = 0; i < 1; i++) {
 		snprintf(buf, sizeof buf, "PING%d", i);
 		mgi_inject(mg, 0, &bssid, &dst, &src, ETHERTYPE_IP, buf, 6);
 		usleep(1000000);
+	}
+
+	int r;
+	uint8_t pkt[PKTSIZE];
+	while (true) {
+		r = mgi_sniff(mg, 0, pkt);
+		if (r > 0)
+			printf("%d\n", r);
 	}
 
 	mmatic_free(mm);

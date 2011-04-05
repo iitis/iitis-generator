@@ -13,6 +13,7 @@
 
 #define IFNAME_FMT "mon%d"
 #define IFINDEX_MAX 8
+#define PKTSIZE 1600
 
 struct mg {
 	mmatic *mm;                /** global memory manager */
