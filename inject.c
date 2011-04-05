@@ -4,29 +4,11 @@
  * IITiS PAN Gliwice
  */
 
-/* TODO: all needed? */
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <ctype.h>
-#include <time.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <errno.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/uio.h>
-#include <sys/time.h>
-#include <net/if.h>
-#include <netpacket/packet.h>
 #include <endian.h>
-#include <byteswap.h>
+#include <netpacket/packet.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 #include <linux/if_ether.h>
-
-/* needed */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <net/ethernet.h>
@@ -38,11 +20,11 @@
 /* from hostap.git/wlantest/inject.c */
 int mgi_inject(struct mg *mg, int ifidx,
 	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
-	void *data, size_t len)
+	uint16_t ether_type, void *data, size_t len)
 {
 	int ret;
 	uint16_t seqle;
-	static uint16_t seq = 1;
+	static uint16_t seq = 0;
 
 	/* radiotap header
 	 * NOTE: this is always LSB!
@@ -51,6 +33,7 @@ int mgi_inject(struct mg *mg, int ifidx,
 	 * TODO: setup radiotap headers for proper channel, antenna, rate, etc. - the packet injection
 	 *       framework touches only 3 of RADIOTAP_FLAGS, but more might be needed by eg. ath9k
 	 *       see Documentation/networking/mac80211-injection.txt */
+#if 0
 	static uint8_t rtap_hdr[] = {
 		0x00, 0x00,             /* radiotap version */
 		0x0e, 0x00,             /* radiotap length */
@@ -60,10 +43,16 @@ int mgi_inject(struct mg *mg, int ifidx,
 		0x00, 0x00,             /* RADIOTAP_RX_FLAGS */
 		0x00, 0x00,             /* RADIOTAP_TX_FLAGS */
 	};
+#endif
+	static uint8_t rtap_hdr[] = {
+		0x00, 0x00,             /* radiotap version */
+		0x08, 0x00,             /* radiotap length */
+		0x00, 0x00, 0x00, 0x00
+	};
 
 	/* 802.11 header - IBSS data frame */
 	static uint8_t ieee80211_hdr[] = {
-		0x20, 0x00,                         /* Frame Control: data */
+		0x08, 0x00,                         /* Frame Control: data */
 		0x00, 0x00,                         /* Duration */
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, /* RA: dst */
 		0x13, 0x22, 0x33, 0x44, 0x55, 0x66, /* SA: src */
@@ -71,15 +60,25 @@ int mgi_inject(struct mg *mg, int ifidx,
 		0x12, 0x34                          /* seq */
 	};
 
+	/* LLC Encapsulated Ethernet header */
+	static uint8_t llc_hdr[] = {
+		0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00,
+		0x08, 0x00
+	};
+
 	/* glue together in an IO vector */
-	static struct iovec iov[3] = {
+	static struct iovec iov[] = {
 		{
 			.iov_base = &rtap_hdr,
 			.iov_len = sizeof rtap_hdr,
 		},
 		{
 			.iov_base = &ieee80211_hdr,
-			.iov_len = sizeof rtap_hdr,
+			.iov_len = sizeof ieee80211_hdr,
+		},
+		{
+			.iov_base = &llc_hdr,
+			.iov_len = sizeof llc_hdr,
 		},
 		{
 			.iov_base = NULL,
@@ -103,12 +102,15 @@ int mgi_inject(struct mg *mg, int ifidx,
 	memcpy(ieee80211_hdr + 10,   src, sizeof *src);
 	memcpy(ieee80211_hdr + 16, bssid, sizeof *bssid);
 
+	ieee80211_hdr[22] = (seq & 0x000f) << 4;
+	ieee80211_hdr[23] = (seq & 0x0ff0) >> 4;
 	seq = (seq + 1) % 4096;
-	seqle = htole16(seq);
-	memcpy(ieee80211_hdr + 22, &seqle, 2);
 
-	iov[2].iov_base = data;
-	iov[2].iov_len  = len;
+	llc_hdr[6] = ether_type >> 8;
+	llc_hdr[7] = ether_type & 0xff;
+
+	iov[N(iov)-1].iov_base = data;
+	iov[N(iov)-1].iov_len  = len;
 
 	ret = sendmsg(mg->inject.fds[ifidx], &msg, 0);
 	if (ret < 0) {
@@ -144,7 +146,7 @@ int mgi_init(struct mg *mg)
 			continue;
 		}
 
-		dbg(1, "bound to " IFNAME_FMT, i);
+		dbg(1, "bound to " IFNAME_FMT "\n", i);
 		mg->inject.fds[i] = fd;
 		count++;
 	}

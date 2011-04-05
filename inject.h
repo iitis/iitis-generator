@@ -14,18 +14,19 @@
 int mgi_init(struct mg *mg);
 
 /** Inject frame
- * @param ifdx     output interface index
- * @param bssid    BSSID
- * @param dst      destination MAC
- * @param src      source MAC
- * @param data     raw link-layer frame
- * @param len      frame length
- * @return         number of bytes sent to socket
- * @retval -1      sendmsg() failed
- * @note           not thread-safe
+ * @param ifdx       output interface index
+ * @param bssid      BSSID
+ * @param dst        destination MAC
+ * @param src        source MAC
+ * @param ether_type ethernet type, set 0x0800 for IPv4
+ * @param data       raw link-layer frame
+ * @param len        frame length
+ * @return           number of bytes sent to socket
+ * @retval -1        sendmsg() failed
+ * @note             not thread-safe
  */
 int mgi_inject(struct mg *mg, int ifidx,
 	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
-	void *data, size_t len);
+	uint16_t ether_type, void *data, size_t len);
 
 #endif

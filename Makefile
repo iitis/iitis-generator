@@ -12,3 +12,5 @@ generator: $(C_OBJECTS)
 
 nfs:
 	cp -a generator /home/pjf/iitis/rbtools/data/nfs/all/usr/sbin/
+
+install: install-std
