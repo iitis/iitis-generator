@@ -1,5 +1,5 @@
-#ifndef _INJECT_H_
-#define _INJECT_H_
+#ifndef _INTERFACE_H_
+#define _INTERFACE_H_
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -28,8 +28,5 @@ int mgi_init(struct mg *mg);
 int mgi_inject(struct mg *mg, int ifidx,
 	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
 	uint16_t ether_type, void *data, size_t len);
-
-/** Get frame from air if its available */
-int mgi_sniff(struct mg *mg, int ifidx, uint8_t pkt[PKTSIZE]);
 
 #endif

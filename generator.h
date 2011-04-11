@@ -8,6 +8,7 @@
 #define _GENERATOR_H_
 
 #include <libpjf/lib.h>
+#include <event.h>
 
 #define GENERATOR_VER "0.1"
 
@@ -15,18 +16,24 @@
 #define IFINDEX_MAX 8
 #define PKTSIZE 1600
 
+struct mg;
+
+struct interface {
+	struct mg *mg;          /** root */
+	int fd;                /** raw interface socket */
+	struct event *evread;  /** read event */
+};
+
 struct mg {
 	mmatic *mm;                /** global memory manager */
 	mmatic *mmtmp;             /** mm that can be freed anytime in main() */
+	struct event_base *evb;    /** libevent base */
 
 	struct {
 		const char *traf_file; /** traffic file path */
 	} options;
 
-	struct {
-		int fds[IFINDEX_MAX];  /** monitor sockets indexed by interface index */
-	} inject;
-
+	struct interface interface[IFINDEX_MAX];
 };
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */

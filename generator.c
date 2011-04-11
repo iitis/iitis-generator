@@ -7,9 +7,10 @@
 #include <getopt.h>
 #include <netinet/ether.h>
 #include <libpjf/main.h>
+#include <event.h>
 
 #include "generator.h"
-#include "inject.h"
+#include "interface.h"
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
 const uint8_t REVERSE[256] =
@@ -19,6 +20,11 @@ const uint8_t REVERSE[256] =
 #   define R6(n) R4(n), R4(n + 2*4 ), R4(n + 1*4 ), R4(n + 3*4 )
 	R6(0), R6(2), R6(1), R6(3)
 };
+
+static void libevent_log(int severity, const char *msg)
+{
+	dbg(MAX(0, _EVENT_LOG_ERR - severity), "%s\n", msg);
+}
 
 /** Prints usage help screen */
 static void help(void)
@@ -92,16 +98,21 @@ int main(int argc, char *argv[])
 	mmatic *mmtmp = mmatic_create();
 	struct mg *mg;
 
-	mg = mmalloc(sizeof(struct mg));
+	/* init */
+	mg = mmzalloc(sizeof(struct mg));
 	mg->mm = mm;
 	mg->mmtmp = mmtmp;
 
 	if (parse_argv(mg, argc, argv))
 		return 1;
 
+	mg->evb = event_init();
+	event_set_log_callback(libevent_log);
+
 	if (mgi_init(mg) <= 0)
 		die("no available interfaces found");
 
+	/* generate */
 	struct ether_addr bssid = { 0x10, 0x20, 0x30, 0x40, 0x50, 0x02 };
 	struct ether_addr dst   = { 0x00, 0xfc, 0x42, 0x64, 0xc4, 0x78 };
 	struct ether_addr src   = { 0x00, 0x8c, 0x42, 0x64, 0xb8, 0x67 };
@@ -113,14 +124,14 @@ int main(int argc, char *argv[])
 		usleep(1000000);
 	}
 
-	int r;
-	uint8_t pkt[PKTSIZE];
-	while (true) {
-		r = mgi_sniff(mg, 0, pkt);
-		if (r > 0)
-			printf("%d\n", r);
-	}
+	/*
+	 * main loop
+	 */
+	event_base_dispatch(mg->evb);
 
+	/* cleanup */
+	event_base_free(mg->evb);
 	mmatic_free(mm);
+
 	return 0;
 }

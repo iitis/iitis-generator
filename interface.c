@@ -14,6 +14,7 @@
 #include <net/ethernet.h>
 
 #include <libpjf/lib.h>
+#include <event.h>
 
 #include "generator.h"
 
@@ -97,7 +98,7 @@ int mgi_inject(struct mg *mg, int ifidx,
 	iov[N(iov)-1].iov_base = data;
 	iov[N(iov)-1].iov_len  = len;
 
-	ret = sendmsg(mg->inject.fds[ifidx], &msg, 0);
+	ret = sendmsg(mg->interface[ifidx].fd, &msg, 0);
 	if (ret < 0) {
 		reterrno(-1, 1, "sendmsg");
 	} else {
@@ -105,32 +106,34 @@ int mgi_inject(struct mg *mg, int ifidx,
 	}
 }
 
-int mgi_sniff(struct mg *mg, int ifidx, uint8_t pkt[PKTSIZE])
+static void _mgi_sniff(int fd, short event, void *arg)
 {
+	//struct interface *interface = arg;
+	uint8_t pkt[PKTSIZE];
 	int ret;
 
-	ret = recvfrom(mg->inject.fds[ifidx], pkt, PKTSIZE, MSG_DONTWAIT, NULL, NULL);
+	ret = recvfrom(fd, pkt, PKTSIZE, MSG_DONTWAIT, NULL, NULL);
+	if (ret > 0) {
+		dbg(7, "captured frame size %d bytes\n", ret);
+		return;
+	}
 
-	if (ret > 0)
-		return ret;
-
-	return (errno == EAGAIN ? 0 : -1);
+	//return (errno == EAGAIN ? 0 : -1);
 }
 
 int mgi_init(struct mg *mg)
 {
 	struct mmatic *mm = mg->mmtmp;
 	struct sockaddr_ll ll;
-	int fd;
 	int count = 0;
+	int fd;
 
+	memset(&ll, 0, sizeof ll);
+	ll.sll_family = AF_PACKET;
+
+	/* open PF_PACKET raw sockets on interfaces */
 	for (int i = 0; i < IFINDEX_MAX; i++) {
-		mg->inject.fds[i] = -1;
-
-		memset(&ll, 0, sizeof ll);
-		ll.sll_family = AF_PACKET;
 		ll.sll_ifindex = if_nametoindex(mmprintf(IFNAME_FMT, i));
-
 		if (ll.sll_ifindex == 0)
 			continue;
 
@@ -144,8 +147,17 @@ int mgi_init(struct mg *mg)
 		}
 
 		dbg(1, "bound to " IFNAME_FMT "\n", i);
-		mg->inject.fds[i] = fd;
 		count++;
+
+		mg->interface[i].mg = mg;
+		mg->interface[i].fd = fd;
+		mg->interface[i].evread = mmatic_alloc(sizeof(struct event), mg->mm);
+
+		/* monitor for incoming packets */
+		event_set(mg->interface[i].evread,
+			fd, EV_READ | EV_PERSIST, _mgi_sniff, &mg->interface[i]);
+
+		event_add(mg->interface[i].evread, NULL);
 	}
 
 	return count;

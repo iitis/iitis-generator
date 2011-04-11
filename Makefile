@@ -1,16 +1,13 @@
 CFLAGS =
-LDFLAGS = -lpjf -lpcre
+LDFLAGS = -lpjf -lpcre -levent
 
 ME=generator
-C_OBJECTS=inject.o generator.o
+C_OBJECTS=interface.o generator.o
 TARGETS=generator
 
 include rules.mk
 
 generator: $(C_OBJECTS)
 	$(CC) $(C_OBJECTS) $(LDFLAGS) -o generator
-
-nfs:
-	cp -a generator /home/pjf/iitis/rbtools/data/nfs/all/usr/sbin/
 
 install: install-std
