@@ -19,7 +19,7 @@
 
 #include "generator.h"
 
-/* from hostap.git/wlantest/inject.c */
+/* Code inspired by hostap.git/wlantest/inject.c */
 int mgi_inject(struct interface *interface,
 	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
 	uint16_t ether_type, void *data, size_t len)
@@ -31,20 +31,20 @@ int mgi_inject(struct interface *interface,
 	 * NOTE: this is always LSB!
 	 * SEE: Documentation/networking/mac80211-injection.txt
 	 * SEE: include/net/ieee80211_radiotap.h */
-	static uint8_t rtap_hdr[] = {
+	static uint8_t rtap_hdr[PKT_RADIOTAP_HDRSIZE] = {
 		0x00, 0x00,             /* radiotap version */
 		0x08, 0x00,             /* radiotap length */
 		0x00, 0x00, 0x00, 0x00
 	};
 
 	/* LLC Encapsulated Ethernet header */
-	static uint8_t llc_hdr[] = {
+	static uint8_t llc_hdr[PKT_LLC_HDRSIZE] = {
 		0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00, PKT_ETHERTYPE >> 8, PKT_ETHERTYPE & 0xff
 	};
 	/******************************************************/
 
 	/* 802.11 header - IBSS data frame */
-	uint8_t ieee80211_hdr[] = {
+	uint8_t ieee80211_hdr[PKT_IEEE80211_HDRSIZE] = {
 		0x08, 0x00,                         /* Frame Control: data */
 		0x00, 0x00,                         /* Duration */
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, /* RA: dst */
@@ -54,7 +54,6 @@ int mgi_inject(struct interface *interface,
 	};
 
 	/* glue together in an IO vector */
-	#define PKT_HEADERS_SIZE (8 + 8 + 24)
 	struct iovec iov[] = {
 		{
 			.iov_base = &rtap_hdr,
@@ -108,15 +107,13 @@ void mgi_send(struct interface *interface,
 	 */
 	uint8_t pkt[PKT_BUFSIZE];
 	struct mg_hdr *mg_hdr;
+	struct timeval timestamp;
 	int i;
 
 	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
 	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, interface->mg->myid }};
 	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, dst }};
 
-	static int ctr = 0; /* TODO */
-
-	/* FIXME: we dont send radiotap headers :) */
 	size -= PKT_HEADERS_SIZE;
 	if (size < sizeof(struct mg_hdr)) {
 		dbg(1, "pkt too short\n");
@@ -127,11 +124,16 @@ void mgi_send(struct interface *interface,
 	}
 
 	/* fill the header */
+	gettimeofday(&timestamp, NULL);
+
 	mg_hdr = (void *) pkt;
-	mg_hdr->mg_tag = htonl(MG_TAG_V1);
-	/* TODO: mg_hdr->time_s time_us */
-	mg_hdr->line_num = line_num;
-	mg_hdr->line_ctr = ctr++;
+	mg_hdr->mg_tag   = htonl(MG_TAG_V1);
+	mg_hdr->time_s   = htonl(timestamp.tv_sec);
+	mg_hdr->time_us  = htonl(timestamp.tv_usec);
+	mg_hdr->line_num = htonl(line_num);
+
+	static int ctr = 0; /* TODO */
+	mg_hdr->line_ctr = htonl(ctr++);
 
 	/* TODO: fill the rest */
 	for (i = sizeof mg_hdr; i < size; i++) {
@@ -148,6 +150,8 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	struct sniff_pkt pkt;
 	int ret, n;
 	struct ieee80211_radiotap_iterator parser;
+	uint8_t *ieee80211_hdr;
+	struct mg_hdr *mg_hdr;
 
 	gettimeofday(&pkt.timestamp, NULL);
 
@@ -169,11 +173,47 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	pkt.interface = interface;
 	pkt.size = ret - parser.max_length;
 
-	/*
-	 * TODO: parse IEEE 802.11 header
-	 * TODO: drop frame if not "ours"
-	 */
+	if (pkt.size < PKT_HEADERS_SIZE + sizeof(struct mg_hdr)) {
+		dbg(11, "skipping short frame\n");
+		return;
+	}
 
+	/*
+	 * parse IEEE 802.11 header
+	 */
+	ieee80211_hdr = (uint8_t *) pkt.pkt + parser.max_length;
+
+	/* skip non-data frames */
+	if (!(ieee80211_hdr[0] == 0x08 && ieee80211_hdr[1] == 0x00)) {
+		dbg(11, "skipping non-data frame\n");
+		return;
+	}
+
+	/* skip invalid BSSID */
+	if (!(ieee80211_hdr[16] == 0x06 &&
+	      ieee80211_hdr[17] == 0xFE &&
+	      ieee80211_hdr[18] == 0xEE &&
+	      ieee80211_hdr[19] == 0xED &&
+	      ieee80211_hdr[20] == 0xFF)) {
+		dbg(9, "skipping invalid bssid frame\n");
+		return;
+	}
+
+	/* skip cross-channel transmissions */
+	if (!(ieee80211_hdr[21] == interface->num)) {
+		dbg(9, "skipping cross-channel frame\n");
+		return;
+	}
+
+	pkt.dstid = ieee80211_hdr[9];
+	pkt.srcid = ieee80211_hdr[15];
+
+	/* drop frames not destined to us
+	 * NB: nice place for some inventions */
+/*	if (pkt.dstid != interface->mg->myid) {
+		dbg(9, "skipping not ours frame\n");
+		return;
+	}*/
 
 	/*
 	 * parse radiotap header
@@ -205,7 +245,7 @@ static void _mgi_sniff(int fd, short event, void *arg)
 				pkt.radio.antnum = *(parser.this_arg);
 				break;
 			default:
-				dbg(3, "unhandled arg %d value %d\n",
+				dbg(3, "unhandled arg %d value %u\n",
 					parser.this_arg_index, *(parser.this_arg));
 				break;
 		}
@@ -214,12 +254,28 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		return;
 	}
 
+	/* skip frames with bad FCS */
+	if (pkt.radio.flags.badfcs) {
+		dbg(9, "skipping bad FCS frame\n");
+		return;
+	}
+
 	dbg(8, "frame: tsft=%llu rate=%u freq=%u rssi=%d size=%u\n",
 		pkt.radio.tsft, pkt.radio.rate / 2, pkt.radio.freq, pkt.radio.rssi, pkt.size);
 
 	/*
-	 * TODO: parse mg header
+	 * parse mg header
 	 */
+	mg_hdr = (struct mg_hdr *) pkt.pkt + parser.max_length + PKT_HEADERS_SIZE;
+#define A(field) pkt.mg_hdr.field = ntohl(mg_hdr->field)
+	A(mg_tag);
+	A(time_s);
+	A(time_us);
+	A(line_num);
+	A(line_ctr);
+#undef A
+
+	pkt.payload = (uint8_t *) mg_hdr + sizeof *mg_hdr;
 
 	/* pass to higher layers */
 	interface->mg->packet_cb(&pkt);

@@ -97,7 +97,7 @@ void packet(struct sniff_pkt *pkt)
 	if (pkt->interface->num != 0)
 		return;
 
-	printf("%llu %d\n", pkt->radio.tsft, pkt->radio.rssi);
+	printf("%llu %d: i=%d\n", pkt->radio.tsft, pkt->radio.rssi, pkt->mg_hdr.line_num);
 }
 
 int main(int argc, char *argv[])
@@ -132,8 +132,8 @@ int main(int argc, char *argv[])
 	/*
 	 * generate
 	 */
-	for (int i = 0; i < 1; i++) {
-		mgi_send(&mg->interface[0], 2, 2, 100);
+	for (int i = 0; i < 100; i++) {
+		mgi_send(&mg->interface[0], 2, i, 1000);
 	}
 
 	/*

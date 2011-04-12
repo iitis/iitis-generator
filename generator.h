@@ -19,6 +19,11 @@
 /** EtherType for generated packets */
 #define PKT_ETHERTYPE 0x0111
 
+#define PKT_RADIOTAP_HDRSIZE 8
+#define PKT_IEEE80211_HDRSIZE 24
+#define PKT_LLC_HDRSIZE 8
+#define PKT_HEADERS_SIZE (PKT_IEEE80211_HDRSIZE + PKT_LLC_HDRSIZE)
+
 struct mg;
 struct interface;
 struct sniff_pkt;
@@ -82,6 +87,8 @@ struct sniff_pkt {
 	uint8_t dstid;                /** destination id */
 	uint16_t size;                /** total packet size (without radiotap) */
 	struct mg_hdr mg_hdr;         /** CPU-endian mg header */
+
+	uint8_t *payload;             /** payload after mg header */
 };
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
