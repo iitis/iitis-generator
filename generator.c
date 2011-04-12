@@ -92,13 +92,23 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 	return 0;
 }
 
+void packet(struct sniff_pkt *pkt)
+{
+	if (pkt->interface->num != 0)
+		return;
+
+	printf("%llu %d\n", pkt->radio.tsft, pkt->radio.rssi);
+}
+
 int main(int argc, char *argv[])
 {
 	mmatic *mm = mmatic_create();
 	mmatic *mmtmp = mmatic_create();
 	struct mg *mg;
 
-	/* init */
+	/*
+	 * initialization
+	 */
 	mg = mmzalloc(sizeof(struct mg));
 	mg->mm = mm;
 	mg->mmtmp = mmtmp;
@@ -106,22 +116,24 @@ int main(int argc, char *argv[])
 	if (parse_argv(mg, argc, argv))
 		return 1;
 
+	/* libevent */
 	mg->evb = event_init();
 	event_set_log_callback(libevent_log);
 
+	/* raw interfaces */
 	if (mgi_init(mg) <= 0)
 		die("no available interfaces found");
 
-	/* generate */
-	struct ether_addr bssid = { 0x10, 0x20, 0x30, 0x40, 0x50, 0x02 };
-	struct ether_addr dst   = { 0x00, 0xfc, 0x42, 0x64, 0xc4, 0x78 };
-	struct ether_addr src   = { 0x00, 0x8c, 0x42, 0x64, 0xb8, 0x67 };
-	char buf[8];
+	mgi_set_callback(mg, packet);
 
+	/* TODO */
+	mg->myid = 1;
+
+	/*
+	 * generate
+	 */
 	for (int i = 0; i < 1; i++) {
-		snprintf(buf, sizeof buf, "PING%d", i);
-		mgi_inject(mg, 0, &bssid, &dst, &src, ETHERTYPE_IP, buf, 6);
-		usleep(1000000);
+		mgi_send(&mg->interface[0], 2, 2, 100);
 	}
 
 	/*

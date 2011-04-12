@@ -1,5 +1,5 @@
-CFLAGS =
-LDFLAGS = -lpjf -lpcre -levent
+CFLAGS = -Ilib/
+LDFLAGS = -lpjf -lpcre -levent lib/radiotap.o
 
 ME=generator
 C_OBJECTS=interface.o generator.o
@@ -8,6 +8,7 @@ TARGETS=generator
 include rules.mk
 
 generator: $(C_OBJECTS)
+	make -C lib
 	$(CC) $(C_OBJECTS) $(LDFLAGS) -o generator
 
 install: install-std

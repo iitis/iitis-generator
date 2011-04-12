@@ -14,7 +14,7 @@
 int mgi_init(struct mg *mg);
 
 /** Inject frame
- * @param ifdx       output interface index
+ * @param interface  interface to inject frame on
  * @param bssid      BSSID
  * @param dst        destination MAC
  * @param src        source MAC
@@ -23,10 +23,30 @@ int mgi_init(struct mg *mg);
  * @param len        frame length
  * @return           number of bytes sent to socket
  * @retval -1        sendmsg() failed
- * @note             not thread-safe
  */
-int mgi_inject(struct mg *mg, int ifidx,
+int mgi_inject(struct interface *interface,
 	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
 	uint16_t ether_type, void *data, size_t len);
+
+/** Send mg frame
+ * A high-level interface to mgi_inject(). Payload is constructed from contents of configuration
+ * file line.
+ * @param interface  interface to send on
+ * @param dst        destination node
+ * @param line_num   configuration file line number
+ * @param size       desired total frame length incl. all headers (TODO: check size)
+ */
+void mgi_send(struct interface *interface,
+	uint8_t dst, uint32_t line_num, int size);
+
+/** Incoming frame callback type
+ * @param pkt        captured frame
+ */
+typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
+
+/** Set incoming frame callback
+ * @param cb         callback function
+ */
+void mgi_set_callback(struct mg *mg, mgi_packet_cb cb);
 
 #endif

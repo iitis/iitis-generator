@@ -15,17 +15,18 @@
 
 #include <libpjf/lib.h>
 #include <event.h>
+#include "lib/radiotap.h"
 
 #include "generator.h"
 
 /* from hostap.git/wlantest/inject.c */
-int mgi_inject(struct mg *mg, int ifidx,
+int mgi_inject(struct interface *interface,
 	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
 	uint16_t ether_type, void *data, size_t len)
 {
 	int ret;
-	static uint16_t seq = 0;
 
+	/******************** static! **************************/
 	/* radiotap header
 	 * NOTE: this is always LSB!
 	 * SEE: Documentation/networking/mac80211-injection.txt
@@ -36,8 +37,14 @@ int mgi_inject(struct mg *mg, int ifidx,
 		0x00, 0x00, 0x00, 0x00
 	};
 
+	/* LLC Encapsulated Ethernet header */
+	static uint8_t llc_hdr[] = {
+		0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00, PKT_ETHERTYPE >> 8, PKT_ETHERTYPE & 0xff
+	};
+	/******************************************************/
+
 	/* 802.11 header - IBSS data frame */
-	static uint8_t ieee80211_hdr[] = {
+	uint8_t ieee80211_hdr[] = {
 		0x08, 0x00,                         /* Frame Control: data */
 		0x00, 0x00,                         /* Duration */
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, /* RA: dst */
@@ -46,14 +53,9 @@ int mgi_inject(struct mg *mg, int ifidx,
 		0x12, 0x34                          /* seq */
 	};
 
-	/* LLC Encapsulated Ethernet header */
-	static uint8_t llc_hdr[] = {
-		0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00,
-		0x08, 0x00
-	};
-
 	/* glue together in an IO vector */
-	static struct iovec iov[] = {
+	#define PKT_HEADERS_SIZE (8 + 8 + 24)
+	struct iovec iov[] = {
 		{
 			.iov_base = &rtap_hdr,
 			.iov_len = sizeof rtap_hdr,
@@ -67,13 +69,13 @@ int mgi_inject(struct mg *mg, int ifidx,
 			.iov_len = sizeof llc_hdr,
 		},
 		{
-			.iov_base = NULL,
-			.iov_len = 0,
+			.iov_base = data,
+			.iov_len = len,
 		}
 	};
 
 	/* message */
-	static struct msghdr msg = {
+	struct msghdr msg = {
 		.msg_name = NULL,
 		.msg_namelen = 0,
 		.msg_iov = iov,
@@ -88,17 +90,7 @@ int mgi_inject(struct mg *mg, int ifidx,
 	memcpy(ieee80211_hdr + 10,   src, sizeof *src);
 	memcpy(ieee80211_hdr + 16, bssid, sizeof *bssid);
 
-	ieee80211_hdr[22] = (seq & 0x000f) << 4;
-	ieee80211_hdr[23] = (seq & 0x0ff0) >> 4;
-	seq = (seq + 1) % 4096;
-
-	llc_hdr[6] = ether_type >> 8;
-	llc_hdr[7] = ether_type & 0xff;
-
-	iov[N(iov)-1].iov_base = data;
-	iov[N(iov)-1].iov_len  = len;
-
-	ret = sendmsg(mg->interface[ifidx].fd, &msg, 0);
+	ret = sendmsg(interface->fd, &msg, 0);
 	if (ret < 0) {
 		reterrno(-1, 1, "sendmsg");
 	} else {
@@ -106,19 +98,131 @@ int mgi_inject(struct mg *mg, int ifidx,
 	}
 }
 
-static void _mgi_sniff(int fd, short event, void *arg)
+void mgi_send(struct interface *interface,
+	uint8_t dst, uint32_t line_num, int size)
 {
-	//struct interface *interface = arg;
-	uint8_t pkt[PKTSIZE];
-	int ret;
+	/* TODO
+	 * 1. setup rbs so:
+	 *    BSSID is 06:FE:EE:ED:FF:<iface.num>
+	 *    MAC is   06:FE:EE:ED:<iface.num>:<myid>
+	 */
+	uint8_t pkt[PKT_BUFSIZE];
+	struct mg_hdr *mg_hdr;
+	int i;
 
-	ret = recvfrom(fd, pkt, PKTSIZE, MSG_DONTWAIT, NULL, NULL);
-	if (ret > 0) {
-		dbg(7, "captured frame size %d bytes\n", ret);
+	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
+	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, interface->mg->myid }};
+	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, dst }};
+
+	static int ctr = 0; /* TODO */
+
+	/* FIXME: we dont send radiotap headers :) */
+	size -= PKT_HEADERS_SIZE;
+	if (size < sizeof(struct mg_hdr)) {
+		dbg(1, "pkt too short\n");
+		return;
+	} else if (size > PKT_BUFSIZE) {
+		dbg(1, "pkt too long\n");
 		return;
 	}
 
-	//return (errno == EAGAIN ? 0 : -1);
+	/* fill the header */
+	mg_hdr = (void *) pkt;
+	mg_hdr->mg_tag = htonl(MG_TAG_V1);
+	/* TODO: mg_hdr->time_s time_us */
+	mg_hdr->line_num = line_num;
+	mg_hdr->line_ctr = ctr++;
+
+	/* TODO: fill the rest */
+	for (i = sizeof mg_hdr; i < size; i++) {
+		pkt[i] = 'A';
+	}
+
+	/* send */
+	mgi_inject(interface, &bssid, &dstmac, &srcmac, PKT_ETHERTYPE, (void *) pkt, (size_t) size);
+}
+
+static void _mgi_sniff(int fd, short event, void *arg)
+{
+	struct interface *interface = arg;
+	struct sniff_pkt pkt;
+	int ret, n;
+	struct ieee80211_radiotap_iterator parser;
+
+	gettimeofday(&pkt.timestamp, NULL);
+
+	ret = recvfrom(fd, pkt.pkt, PKT_BUFSIZE, MSG_DONTWAIT, NULL, NULL);
+	if (ret <= 0) {
+		if (errno != EAGAIN)
+			dbg(1, "recvfrom(): %s\n", strerror(errno));
+		return;
+	}
+
+	/*
+	 * init
+	 */
+	if (ieee80211_radiotap_iterator_init(&parser, (void *) pkt.pkt, ret) < 0) {
+		dbg(1, "ieee80211_radiotap_iterator_init() failed\n");
+		return;
+	}
+
+	pkt.interface = interface;
+	pkt.size = ret - parser.max_length;
+
+	/*
+	 * TODO: parse IEEE 802.11 header
+	 * TODO: drop frame if not "ours"
+	 */
+
+
+	/*
+	 * parse radiotap header
+	 */
+	memset(&(pkt.radio), 0, sizeof pkt.radio);
+	while ((n = ieee80211_radiotap_iterator_next(&parser)) == 0) {
+		switch (parser.this_arg_index) {
+			case IEEE80211_RADIOTAP_TSFT:
+				pkt.radio.tsft = le64toh(*((uint64_t *) parser.this_arg));
+				break;
+			case IEEE80211_RADIOTAP_FLAGS:
+				pkt.radio.flags.val      = *parser.this_arg;
+				pkt.radio.flags.cfp      = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_CFP;
+				pkt.radio.flags.shortpre = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_SHORTPRE;
+				pkt.radio.flags.frag     = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_FRAG;
+				pkt.radio.flags.badfcs   = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_BADFCS;
+				break;
+			case IEEE80211_RADIOTAP_RATE:
+				pkt.radio.rate = *(parser.this_arg);
+				break;
+			case IEEE80211_RADIOTAP_CHANNEL:
+				pkt.radio.freq = le16toh(*((uint16_t *) parser.this_arg));
+				/* NB: skip channel flags */
+				break;
+			case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
+				pkt.radio.rssi = *((int8_t *) parser.this_arg);
+				break;
+			case IEEE80211_RADIOTAP_ANTENNA:
+				pkt.radio.antnum = *(parser.this_arg);
+				break;
+			default:
+				dbg(3, "unhandled arg %d value %d\n",
+					parser.this_arg_index, *(parser.this_arg));
+				break;
+		}
+	} if (n != -ENOENT) {
+		dbg(1, "ieee80211_radiotap_iterator_next() failed\n");
+		return;
+	}
+
+	dbg(8, "frame: tsft=%llu rate=%u freq=%u rssi=%d size=%u\n",
+		pkt.radio.tsft, pkt.radio.rate / 2, pkt.radio.freq, pkt.radio.rssi, pkt.size);
+
+	/*
+	 * TODO: parse mg header
+	 */
+
+	/* pass to higher layers */
+	interface->mg->packet_cb(&pkt);
 }
 
 int mgi_init(struct mg *mg)
@@ -150,6 +254,7 @@ int mgi_init(struct mg *mg)
 		count++;
 
 		mg->interface[i].mg = mg;
+		mg->interface[i].num = i;
 		mg->interface[i].fd = fd;
 		mg->interface[i].evread = mmatic_alloc(sizeof(struct event), mg->mm);
 
@@ -161,4 +266,9 @@ int mgi_init(struct mg *mg)
 	}
 
 	return count;
+}
+
+void mgi_set_callback(struct mg *mg, mgi_packet_cb cb)
+{
+	mg->packet_cb = cb;
 }
