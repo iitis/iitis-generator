@@ -34,7 +34,7 @@ int mgi_inject(struct interface *interface,
  * @param interface  interface to send on
  * @param dst        destination node
  * @param line_num   configuration file line number
- * @param size       desired total frame length incl. all headers (TODO: check size)
+ * @param size       desired total frame length in air, incl. all headers
  */
 void mgi_send(struct interface *interface,
 	uint8_t dst, uint32_t line_num, int size);

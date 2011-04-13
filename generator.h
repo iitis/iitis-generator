@@ -21,6 +21,7 @@
 
 #define PKT_RADIOTAP_HDRSIZE 8
 #define PKT_IEEE80211_HDRSIZE 24
+#define PKT_IEEE80211_FCSSIZE 4
 #define PKT_LLC_HDRSIZE 8
 #define PKT_HEADERS_SIZE (PKT_IEEE80211_HDRSIZE + PKT_LLC_HDRSIZE)
 
@@ -89,6 +90,7 @@ struct sniff_pkt {
 	struct mg_hdr mg_hdr;         /** CPU-endian mg header */
 
 	uint8_t *payload;             /** payload after mg header */
+	uint32_t paylen;              /** payload length */
 };
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */

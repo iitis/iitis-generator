@@ -1,6 +1,6 @@
 /*
  * ath9k monitor mode packet generator
- * Paweł Foremski <pforemski@gmail.com> 2011
+ * Paweł Foremski <pjf@iitis.pl> 2011
  * IITiS PAN Gliwice
  */
 
@@ -34,6 +34,7 @@ static void help(void)
 	printf("  A mac80211 packet generator.\n");
 	printf("\n");
 	printf("Options:\n");
+	printf("  --id=<num>             my ID number [extract from hostname]\n");
 	printf("  --verbose              be verbose (alias for --debug=5)\n");
 	printf("  --debug=<num>          set debugging level\n");
 	printf("  --help,-h              show this usage help screen\n");
@@ -45,7 +46,7 @@ static void version(void)
 {
 	printf("generator %s\n", GENERATOR_VER);
 	printf("Copyright (C) 2011 IITiS PAN Gliwice www.iitis.pl\n");
-	printf("Author: Paweł Foremski <pforemski@gmail.com>\n");
+	printf("Author: Paweł Foremski <pjf@iitis.pl>\n");
 	printf("Licensed under GNU GPL v3.\n");
 }
 
@@ -55,7 +56,8 @@ static void version(void)
  * @retval 2     ok, but main() should exit (eg. on --version or --help) */
 static int parse_argv(struct mg *mg, int argc, char *argv[])
 {
-	int i, c;
+	int i, j, c;
+	char hostname[128];
 
 	static char *short_opts = "hvd";
 	static struct option long_opts[] = {
@@ -64,6 +66,7 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		{ "debug",      1, NULL,  2  },
 		{ "help",       0, NULL,  3  },
 		{ "version",    0, NULL,  4  },
+		{ "id",         1, NULL,  5  },
 		{ 0, 0, 0, 0 }
 	};
 
@@ -78,6 +81,7 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 			case  3 : help(); return 2;
 			case 'v':
 			case  4 : version(); return 2;
+			case  5 : mg->myid = atoi(optarg); break;
 			default: help(); return 1;
 		}
 	}
@@ -89,6 +93,16 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		return 1;
 	}
 
+	if (mg->myid == 0) {
+		gethostname(hostname, sizeof hostname);
+		for (i = 0; hostname[i]; i++)
+			if (isdigit(hostname[i]))
+				break;
+
+		mg->myid = atoi(hostname + i);
+		dbg(1, "my id: %d\n", mg->myid);
+	}
+
 	return 0;
 }
 
@@ -97,7 +111,9 @@ void packet(struct sniff_pkt *pkt)
 	if (pkt->interface->num != 0)
 		return;
 
-	printf("%llu %d: i=%d\n", pkt->radio.tsft, pkt->radio.rssi, pkt->mg_hdr.line_num);
+	printf("%llu %d: line_num=%u line_ctr=%u\n",
+		pkt->radio.tsft, pkt->radio.rssi,
+		pkt->mg_hdr.line_num, pkt->mg_hdr.line_ctr);
 }
 
 int main(int argc, char *argv[])
@@ -126,14 +142,16 @@ int main(int argc, char *argv[])
 
 	mgi_set_callback(mg, packet);
 
-	/* TODO */
-	mg->myid = 1;
-
 	/*
 	 * generate
 	 */
-	for (int i = 0; i < 100; i++) {
-		mgi_send(&mg->interface[0], 2, i, 1000);
+	if (mg->myid == 1) {
+		for (int i = 0; i < 100; i++) {
+			mgi_send(&mg->interface[0], 2, i, 1000);
+			mgi_send(&mg->interface[0], 2, i, 1000);
+			mgi_send(&mg->interface[0], 2, i, 1000);
+			usleep(1000000);
+		}
 	}
 
 	/*
