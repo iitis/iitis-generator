@@ -56,7 +56,7 @@ static void version(void)
  * @retval 2     ok, but main() should exit (eg. on --version or --help) */
 static int parse_argv(struct mg *mg, int argc, char *argv[])
 {
-	int i, j, c;
+	int i, c;
 	char hostname[128];
 
 	static char *short_opts = "hvd";
@@ -81,7 +81,7 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 			case  3 : help(); return 2;
 			case 'v':
 			case  4 : version(); return 2;
-			case  5 : mg->myid = atoi(optarg); break;
+			case  5 : mg->options.myid = atoi(optarg); break;
 			default: help(); return 1;
 		}
 	}
@@ -93,14 +93,14 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		return 1;
 	}
 
-	if (mg->myid == 0) {
+	if (mg->options.myid == 0) {
 		gethostname(hostname, sizeof hostname);
 		for (i = 0; hostname[i]; i++)
 			if (isdigit(hostname[i]))
 				break;
 
-		mg->myid = atoi(hostname + i);
-		dbg(1, "my id: %d\n", mg->myid);
+		mg->options.myid = atoi(hostname + i);
+		dbg(1, "my id: %d\n", mg->options.myid);
 	}
 
 	return 0;
@@ -114,6 +114,73 @@ void packet(struct sniff_pkt *pkt)
 	printf("%llu %d: line_num=%u line_ctr=%u\n",
 		pkt->radio.tsft, pkt->radio.rssi,
 		pkt->mg_hdr.line_num, pkt->mg_hdr.line_ctr);
+}
+
+/** Parse traffic file
+ * @retval 0 success
+ */
+int parse_traffic(struct mg *mg)
+{
+	FILE *fp;
+	char buf[BUFSIZ];
+	uint32_t line_num = 0;
+	int i, j, token;
+	struct line *line;
+
+	fp = fopen(mg->options.traf_file, "r");
+	if (!fp)
+		return 1;
+
+	while (fgets(buf, sizeof buf, fp)) {
+		line_num++;
+		if (line_num >= N(mg->lines))
+			die("Too many lines in the traffic file");
+
+		if (buf[0] == '#' || buf[0] == '\r' || buf[0] == '\n')
+			continue;
+
+		line = mmatic_zalloc(sizeof *line, mg->mm);
+		line->line_num = line_num;
+		mg->lines[line_num] = line;
+
+		i = j = token = 0;
+		do {
+			if (buf[j] == '\0' || buf[j] == ' ' || buf[j] == '\r' || buf[j] == '\n') {
+				token++;
+
+				if (buf[j]) {
+					buf[j] = '\0';
+					j++;
+				}
+
+				/* FORMAT: time interface_num src dst rate noack? command params... */
+				switch (token) {
+					case 1:
+						line->time_s = atoi(buf+i);
+
+						for (; i < j; i++) {
+							if (buf[i] == '.') {
+								line->time_us = atoi(buf + i + 1);
+								break;
+							}
+						}
+						break;
+					default:
+						dbg(0, "token %d: %s\n", token, buf+i);
+						break;
+				}
+
+				i = j;
+			} else {
+				j++;
+			}
+		} while(buf[j]);
+
+		/* TODO: if line is OK, make and schedule event, passing *line to callback each time */
+	}
+
+	fclose(fp);
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -137,26 +204,22 @@ int main(int argc, char *argv[])
 	event_set_log_callback(libevent_log);
 
 	/* raw interfaces */
-	if (mgi_init(mg) <= 0)
-		die("no available interfaces found");
+	if (mgi_init(mg) <= 0) {
+		dbg(0, "no available interfaces found");
+		return 2;
+	}
 
+	/* TODO: packet handler */
 	mgi_set_callback(mg, packet);
 
-	/*
-	 * generate
-	 */
-	if (mg->myid == 1) {
-		for (int i = 0; i < 100; i++) {
-			mgi_send(&mg->interface[0], 2, i, 1000);
-			mgi_send(&mg->interface[0], 2, i, 1000);
-			mgi_send(&mg->interface[0], 2, i, 1000);
-			usleep(1000000);
-		}
-	}
+	/* parse traffic file */
+	if (parse_traffic(mg))
+		return 3;
 
 	/*
 	 * main loop
 	 */
+	/* TODO: make garbage collector */
 	event_base_dispatch(mg->evb);
 
 	/* cleanup */

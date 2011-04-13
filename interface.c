@@ -108,7 +108,7 @@ void mgi_send(struct interface *interface,
 	int i;
 
 	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
-	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, interface->mg->myid }};
+	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, interface->mg->options.myid }};
 	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, dst }};
 
 	size -= PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE;
@@ -141,6 +141,7 @@ void mgi_send(struct interface *interface,
 	mgi_inject(interface, &bssid, &dstmac, &srcmac, PKT_ETHERTYPE, (void *) pkt, (size_t) size);
 }
 
+/* TODO: handle retried frames */
 static void _mgi_sniff(int fd, short event, void *arg)
 {
 	struct interface *interface = arg;
@@ -172,7 +173,7 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	pkt.interface = interface;
 	pkt.size = ret - parser.max_length;
 
-	if (pkt.size < PKT_HEADERS_SIZE + sizeof(struct mg_hdr)) {
+	if (pkt.size < PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE + sizeof *mg_hdr) {
 		dbg(11, "skipping short frame\n");
 		return;
 	}
@@ -207,14 +208,14 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	pkt.dstid = ieee80211_hdr[9];
 	pkt.srcid = ieee80211_hdr[15];
 
-	if (pkt.srcid == interface->mg->myid) {
+	if (pkt.srcid == interface->mg->options.myid) {
 		dbg(13, "skipping local frame (%d)\n", pkt.srcid);
 		return;
 	}
 
 	/* drop frames not destined to us
 	 * NB: nice place for some inventions */
-	if (pkt.dstid != interface->mg->myid) {
+	if (pkt.dstid != interface->mg->options.myid) {
 		dbg(9, "skipping not ours frame (%d)\n", pkt.dstid);
 		return;
 	}

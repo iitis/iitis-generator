@@ -1,11 +1,21 @@
 #
-# Przykładowy plik wejściowy
+# Exemplary input file
 #
-# format:
-# czas bssid src dst type params
+# FORMAT:
+# time interface src dst rate noack? command params...
+#
+# COMMANDS:
+# packet [len=100] [num=1] [T=1000]
+#   len     frame length [B]
+#   num     number of repetitions
+#   T       time space between repetitions [us]
 
-# zacznij od ramki 7 -> 6 długości 10 w czasie 1s 500ms
-1.500000 0 7 6 packet 10
+# make noisy 7->8 background for 1<->2 communication
+# send 1000 big frames each 200us = total 200ms transfer
+0.400000 0 7 8 auto 0 packet 1500 1000 200
 
-# "odpowiedź" 1ms i 250us później
-1.501250 0 6 7 packet 10
+# start with a 1000-byte frame 1->2 on 0s 500ms
+0.500000 0 1 2 auto 0 packet 1000
+
+# short "answer" 1ms 250us later
+0.501250 0 2 1 auto 0 packet 25

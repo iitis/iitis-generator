@@ -23,14 +23,41 @@
 #define PKT_IEEE80211_HDRSIZE 24
 #define PKT_IEEE80211_FCSSIZE 4
 #define PKT_LLC_HDRSIZE 8
+
+/** Length of all frame headers "in the air" */
 #define PKT_HEADERS_SIZE (PKT_IEEE80211_HDRSIZE + PKT_LLC_HDRSIZE)
+
+/** Maximum number of lines in traffic file */
+#define TRAFFIC_LINE_MAX 10000
 
 struct mg;
 struct interface;
 struct sniff_pkt;
+struct line;
 
 #include "interface.h"
 
+/** Traffic file line */
+struct line {
+	struct event ev;           /** libevent handle */
+	uint32_t line_num;         /** line number in traffic file */
+	uint32_t line_ctr;         /** line counter for sending */
+
+	const char *contents;      /** line contents */
+	uint32_t time_s;           /** time [s] */
+	uint32_t time_us;          /** time [us] */
+	uint8_t interface_num;     /** interface number */
+	uint8_t srcid;             /** src id */
+	uint8_t dstid;             /** dst id */
+	uint8_t rate;              /** bitrate [in 0.5Mbps] or 0 for "auto" */
+	bool    noack;             /** no ACK? */
+
+	const char *cmd;           /** command name */
+	const char **argv;         /** arguments, argv[0] is command */
+	int argc;                  /** length of argv */
+};
+
+/** Represents network interface */
 struct interface {
 	struct mg *mg;             /** root */
 	int num;                   /** interface number */
@@ -38,32 +65,36 @@ struct interface {
 	struct event *evread;      /** read event */
 };
 
+/** Main data structure, root for all data */
 struct mg {
 	mmatic *mm;                /** global memory manager */
 	mmatic *mmtmp;             /** mm that can be freed anytime in main() */
 	struct event_base *evb;    /** libevent base */
 
-	uint8_t myid;             /** my id number */
-
 	struct {
+		uint8_t myid;          /** my id number */
 		const char *traf_file; /** traffic file path */
 	} options;
 
 	/* interface.c */
 	struct interface interface[IFINDEX_MAX];
 	mgi_packet_cb packet_cb;
+
+	/* traffic file lines (NB: sparse) */
+	struct line *lines[TRAFFIC_LINE_MAX];
 };
 
-/* data format */
+/** mg frame format */
 struct mg_hdr {
 #define MG_TAG_V1 0xFEEEED01
 	uint32_t mg_tag;           /** mg protocol tag */
 	uint32_t time_s;           /** local time: seconds */
 	uint32_t time_us;          /** local time: microseconds */
-	uint32_t line_num;         /** configuration file line number */
+	uint32_t line_num;         /** traffic file line number */
 	uint32_t line_ctr;         /** counter inside this single line */
 };
 
+/** Received packet info */
 struct sniff_pkt {
 	struct interface *interface;  /** interface packet arrived on */
 	uint8_t pkt[PKT_BUFSIZE];     /** raw frame */
