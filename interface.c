@@ -99,17 +99,20 @@ int mgi_inject(struct interface *interface,
 	}
 }
 
-void mgi_send(struct interface *interface,
-	uint8_t dst, uint32_t line_num, int size)
+void mgi_send(struct line *line, uint8_t *payload, int size)
 {
 	uint8_t pkt[PKT_BUFSIZE];
 	struct mg_hdr *mg_hdr;
 	struct timeval timestamp;
-	int i;
+	struct interface *interface = line->interface;
+	int i, j;
 
 	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
-	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, interface->mg->options.myid }};
-	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, dst }};
+	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->mg->options.myid }};
+	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->dstid }};
+
+	dbg(9, "sending line %d: %d -> %d size %d\n",
+		line->line_num, line->mg->options.myid, line->dstid, size);
 
 	size -= PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE;
 	if (size < sizeof *mg_hdr) {
@@ -127,14 +130,24 @@ void mgi_send(struct interface *interface,
 	mg_hdr->mg_tag   = htonl(MG_TAG_V1);
 	mg_hdr->time_s   = htonl(timestamp.tv_sec);
 	mg_hdr->time_us  = htonl(timestamp.tv_usec);
-	mg_hdr->line_num = htonl(line_num);
+	mg_hdr->line_num = htonl(line->line_num);
+	mg_hdr->line_ctr = htonl(line->line_ctr++);
 
-	static int ctr = 0; /* TODO */
-	mg_hdr->line_ctr = htonl(ctr++);
+	/* fill the rest */
+	j = 0;
+	if (payload) {
+		for (i = sizeof *mg_hdr; i < size; i++) {
+			pkt[i] = payload[j++];
+		}
+	} else {
+		for (i = sizeof *mg_hdr; i < size; i++) {
+			pkt[i] = line->contents[j];
 
-	/* TODO: fill the rest */
-	for (i = sizeof *mg_hdr; i < size; i++) {
-		pkt[i] = 'A';
+			if (line->contents[j] == '\0')
+				j = 0;
+			else
+				j++;
+		}
 	}
 
 	/* send */
@@ -296,7 +309,7 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	interface->mg->packet_cb(&pkt);
 }
 
-int mgi_init(struct mg *mg)
+int mgi_init(struct mg *mg, mgi_packet_cb cb)
 {
 	struct mmatic *mm = mg->mmtmp;
 	struct sockaddr_ll ll;
@@ -305,6 +318,8 @@ int mgi_init(struct mg *mg)
 
 	memset(&ll, 0, sizeof ll);
 	ll.sll_family = AF_PACKET;
+
+	mg->packet_cb = cb;
 
 	/* open PF_PACKET raw sockets on interfaces */
 	for (int i = 0; i < IFINDEX_MAX; i++) {
@@ -337,9 +352,4 @@ int mgi_init(struct mg *mg)
 	}
 
 	return count;
-}
-
-void mgi_set_callback(struct mg *mg, mgi_packet_cb cb)
-{
-	mg->packet_cb = cb;
 }

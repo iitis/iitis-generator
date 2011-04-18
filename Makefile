@@ -2,7 +2,7 @@ CFLAGS = -Ilib/
 LDFLAGS = -lpjf -lpcre -levent lib/radiotap.o
 
 ME=generator
-C_OBJECTS=interface.o generator.o
+C_OBJECTS=interface.o generator.o cmd-packet.o
 TARGETS=generator
 
 include rules.mk

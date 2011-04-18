@@ -14,6 +14,11 @@
 
 #define IFNAME_FMT "mon%d"
 #define IFINDEX_MAX 8
+
+/** max number of arguments to command in a traffic file line */
+#define LINE_ARGS_MAX 8
+
+/** size of a buffer for frames */
 #define PKT_BUFSIZE 2000
 
 /** EtherType for generated packets */
@@ -27,6 +32,9 @@
 /** Length of all frame headers "in the air" */
 #define PKT_HEADERS_SIZE (PKT_IEEE80211_HDRSIZE + PKT_LLC_HDRSIZE)
 
+/** Total packet overhead */
+#define PKT_TOTAL_OVERHEAD (PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE + sizeof(struct mg_hdr))
+
 /** Maximum number of lines in traffic file */
 #define TRAFFIC_LINE_MAX 10000
 
@@ -39,22 +47,24 @@ struct line;
 
 /** Traffic file line */
 struct line {
-	struct event ev;           /** libevent handle */
-	uint32_t line_num;         /** line number in traffic file */
-	uint32_t line_ctr;         /** line counter for sending */
+	struct mg *mg;                   /** root */
+	struct event ev;                 /** libevent handle */
+	uint32_t line_num;               /** line number in traffic file */
+	uint32_t line_ctr;               /** line counter for sending */
 
-	const char *contents;      /** line contents */
-	uint32_t time_s;           /** time [s] */
-	uint32_t time_us;          /** time [us] */
-	uint8_t interface_num;     /** interface number */
-	uint8_t srcid;             /** src id */
-	uint8_t dstid;             /** dst id */
-	uint8_t rate;              /** bitrate [in 0.5Mbps] or 0 for "auto" */
-	bool    noack;             /** no ACK? */
+	const char *contents;            /** line contents */
+	struct timeval tv;               /** time anchor */
+	struct interface *interface;     /** interface number */
+	uint8_t srcid;                   /** src id */
+	uint8_t dstid;                   /** dst id */
+	uint8_t rate;                    /** bitrate [in 0.5Mbps] or 0 for "auto" */
+	bool    noack;                   /** no ACK? */
 
-	const char *cmd;           /** command name */
-	const char **argv;         /** arguments, argv[0] is command */
-	int argc;                  /** length of argv */
+	int argc;                        /** length of argv */
+	const char *argv[LINE_ARGS_MAX]; /** arguments, argv[0] is command */
+
+	const char *cmd;                 /** command name */
+	void *prv;                       /** command private data */
 };
 
 /** Represents network interface */

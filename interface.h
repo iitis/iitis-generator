@@ -9,9 +9,14 @@
 
 #include "generator.h"
 
+/** Incoming frame callback type
+ * @param pkt        captured frame */
+typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
+
 /** Initialize generator data
+ * @param cb  handler for incoming frames destined to this node
  * @return number of successfully initialized interfaces */
-int mgi_init(struct mg *mg);
+int mgi_init(struct mg *mg, mgi_packet_cb cb);
 
 /** Inject frame
  * @param interface  interface to inject frame on
@@ -29,24 +34,12 @@ int mgi_inject(struct interface *interface,
 	uint16_t ether_type, void *data, size_t len);
 
 /** Send mg frame
- * A high-level interface to mgi_inject(). Payload is constructed from contents of configuration
- * file line.
- * @param interface  interface to send on
- * @param dst        destination node
- * @param line_num   configuration file line number
- * @param size       desired total frame length in air, incl. all headers
- */
-void mgi_send(struct interface *interface,
-	uint8_t dst, uint32_t line_num, int size);
-
-/** Incoming frame callback type
- * @param pkt        captured frame
- */
-typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
-
-/** Set incoming frame callback
- * @param cb         callback function
- */
-void mgi_set_callback(struct mg *mg, mgi_packet_cb cb);
+ * A high-level interface to mgi_inject(). If payload is NULL, its constructed from contents of
+ * configuration file line.
+ * @param line       traffic file line
+ * @param payload    payload, may be NULL
+ * @param size       desired total frame length in air, including all headers,
+ *                   that is PKT_TOTAL_OVERHEAD */
+void mgi_send(struct line *line, uint8_t *payload, int size);
 
 #endif

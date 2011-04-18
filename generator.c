@@ -11,6 +11,7 @@
 
 #include "generator.h"
 #include "interface.h"
+#include "cmd-packet.h"
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
 const uint8_t REVERSE[256] =
@@ -106,30 +107,49 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 	return 0;
 }
 
-void packet(struct sniff_pkt *pkt)
+/** Pass incoming packet to proper handler */
+void handle_packet(struct sniff_pkt *pkt)
 {
-	if (pkt->interface->num != 0)
-		return;
+	struct line *line;
 
-	printf("%llu %d: line_num=%u line_ctr=%u\n",
-		pkt->radio.tsft, pkt->radio.rssi,
-		pkt->mg_hdr.line_num, pkt->mg_hdr.line_ctr);
+	if (pkt->mg_hdr.line_num >= TRAFFIC_LINE_MAX) {
+		dbg(1, "received too big line number: %d\n", pkt->mg_hdr.line_num);
+		return;
+	}
+
+	line = pkt->interface->mg->lines[pkt->mg_hdr.line_num];
+	if (!line) {
+		dbg(1, "received invalid line number: %d\n", pkt->mg_hdr.line_num);
+		return;
+	}
+
+	if (streq(line->cmd, "packet")) {
+		cmd_packet_in(line, pkt);
+	}
+
+	return;
 }
 
 /** Parse traffic file
  * @retval 0 success
+ * @retval 1 syntax error
+ * @retval 2 logic error
  */
 int parse_traffic(struct mg *mg)
 {
 	FILE *fp;
 	char buf[BUFSIZ];
 	uint32_t line_num = 0;
-	int i, j, token;
+	int i, j, token, rc;
 	struct line *line;
 
+	void (*handle)(int, short, void *);
+	int (*initialize)(struct line *line);
+
 	fp = fopen(mg->options.traf_file, "r");
-	if (!fp)
-		return 1;
+	if (!fp) {
+		reterrno(1, 0, "could not open traffic file");
+	}
 
 	while (fgets(buf, sizeof buf, fp)) {
 		line_num++;
@@ -140,7 +160,9 @@ int parse_traffic(struct mg *mg)
 			continue;
 
 		line = mmatic_zalloc(sizeof *line, mg->mm);
+		line->mg = mg;
 		line->line_num = line_num;
+		line->contents = mmatic_strdup(buf, line);
 		mg->lines[line_num] = line;
 
 		i = j = token = 0;
@@ -156,17 +178,53 @@ int parse_traffic(struct mg *mg)
 				/* FORMAT: time interface_num src dst rate noack? command params... */
 				switch (token) {
 					case 1:
-						line->time_s = atoi(buf+i);
+						line->tv.tv_sec = atoi(buf+i);
 
 						for (; i < j; i++) {
 							if (buf[i] == '.') {
-								line->time_us = atoi(buf + i + 1);
+								line->tv.tv_usec = atoi(buf + i + 1);
 								break;
 							}
 						}
 						break;
+					case 2:
+						rc = atoi(buf+i);
+						if (rc >= IFINDEX_MAX) {
+							dbg(0, "%s: line %d: too big interface number: %d\n",
+								mg->options.traf_file, line->line_num, rc);
+							return 1;
+						}
+
+						line->interface = &mg->interface[rc];
+						if (line->interface->fd <= 0) {
+							dbg(0, "%s: line %d: interface not opened: %d\n",
+								mg->options.traf_file, line->line_num, rc);
+							return 2;
+						}
+						break;
+					case 3:
+						line->srcid = atoi(buf+i);
+						break;
+					case 4:
+						line->dstid = atoi(buf+i);
+						break;
+					case 5:
+						line->rate = atoi(buf+i); /* NB: "auto" => 0 */
+						break;
+					case 6:
+						line->noack = atoi(buf+i);
+						break;
+					case 7:
+						line->cmd = mmatic_strdup(buf+i, mg->mm);
+						/* NB: fall-through */
 					default:
-						dbg(0, "token %d: %s\n", token, buf+i);
+						if (line->argc == LINE_ARGS_MAX - 1) {
+							dbg(0, "%s: line %d: too many line arguments: %d\n",
+								mg->options.traf_file, line_num, line->argc);
+							return 2;
+						}
+
+						line->argv[line->argc++] = mmatic_strdup(buf+i, mg->mm);
 						break;
 				}
 
@@ -176,7 +234,24 @@ int parse_traffic(struct mg *mg)
 			}
 		} while(buf[j]);
 
-		/* TODO: if line is OK, make and schedule event, passing *line to callback each time */
+		line->argv[line->argc] = NULL;
+
+		/* choose handler for command
+		 * in future?: change to dynamic loader and dlsym() */
+		if (streq(line->cmd, "packet")) {
+			handle = cmd_packet_out;
+			initialize = cmd_packet_init;
+		}
+
+		/* prepare (may contain further line parsing) */
+		evtimer_set(&line->ev, handle, line);
+		rc = initialize(line);
+		if (rc != 0)
+			return rc;
+
+		/* schedule */
+		if (line->srcid == mg->options.myid)
+			evtimer_add(&line->ev, &line->tv);
 	}
 
 	fclose(fp);
@@ -204,17 +279,23 @@ int main(int argc, char *argv[])
 	event_set_log_callback(libevent_log);
 
 	/* raw interfaces */
-	if (mgi_init(mg) <= 0) {
+	if (mgi_init(mg, handle_packet) <= 0) {
 		dbg(0, "no available interfaces found");
 		return 2;
 	}
 
-	/* TODO: packet handler */
-	mgi_set_callback(mg, packet);
-
 	/* parse traffic file */
 	if (parse_traffic(mg))
 		return 3;
+
+	/* FIXME: naive synchronization of all nodes */
+	struct timeval tv;
+	while (true) {
+		gettimeofday(&tv, NULL);
+		if (tv.tv_sec % 10 == 0)
+			break;
+	}
+	dbg(0, "Starting on %d.%d\n", tv.tv_sec, tv.tv_usec);
 
 	/*
 	 * main loop
