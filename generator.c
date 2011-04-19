@@ -13,6 +13,7 @@
 #include "interface.h"
 #include "cmd-packet.h"
 #include "schedule.h"
+#include "sync.h"
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
 const uint8_t REVERSE[256] =
@@ -322,14 +323,8 @@ int main(int argc, char *argv[])
 	/*
 	 * main loop
 	 */
-	
-	/* FIXME: naive synchronization of all nodes */
-	struct timeval tv;
-	while (true) {
-		gettimeofday(&tv, NULL);
-		if (tv.tv_sec % 3 == 0 && tv.tv_usec < 100)
-			break;
-	}
+	/* synchronize */
+	mgc_sync(mg);
 	dbg(0, "Starting\n");
 
 	/* schedule all */
