@@ -9,10 +9,6 @@
 
 #include "generator.h"
 
-/** Incoming frame callback type
- * @param pkt        captured frame */
-typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
-
 /** Initialize generator data
  * @param cb  handler for incoming frames destined to this node
  * @return number of successfully initialized interfaces */

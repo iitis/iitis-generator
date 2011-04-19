@@ -42,8 +42,16 @@ struct mg;
 struct interface;
 struct sniff_pkt;
 struct line;
+struct schedule;
 
-#include "interface.h"
+/** Incoming frame callback type
+ * @param pkt        captured frame */
+typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
+
+/** Scheduler info */
+struct schedule {
+	struct timeval last;             /** absolute time of last schedule request */
+};
 
 /** Traffic file line */
 struct line {
@@ -51,6 +59,7 @@ struct line {
 	struct event ev;                 /** libevent handle */
 	uint32_t line_num;               /** line number in traffic file */
 	uint32_t line_ctr;               /** line counter for sending */
+	struct schedule schedule;        /** scheduler info */
 
 	const char *contents;            /** line contents */
 	struct timeval tv;               /** time anchor */
@@ -81,17 +90,22 @@ struct mg {
 	mmatic *mmtmp;             /** mm that can be freed anytime in main() */
 	struct event_base *evb;    /** libevent base */
 
+	struct event hbev;         /** heartbeat event */
+	struct schedule hbs;       /** heartbeat schedule info */
+
+	/** command line options */
 	struct {
 		uint8_t myid;          /** my id number */
 		const char *traf_file; /** traffic file path */
 	} options;
 
-	/* interface.c */
+	/** interfaces - see interface.c */
 	struct interface interface[IFINDEX_MAX];
-	mgi_packet_cb packet_cb;
+	mgi_packet_cb packet_cb;   /** handler for incoming frames */
 
-	/* traffic file lines (NB: sparse) */
+	/** traffic file lines (NB: sparse) */
 	struct line *lines[TRAFFIC_LINE_MAX];
+	int running;               /** number of still "running" lines */
 };
 
 /** mg frame format */

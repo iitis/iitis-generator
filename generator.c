@@ -12,6 +12,7 @@
 #include "generator.h"
 #include "interface.h"
 #include "cmd-packet.h"
+#include "schedule.h"
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
 const uint8_t REVERSE[256] =
@@ -36,7 +37,7 @@ static void help(void)
 	printf("\n");
 	printf("Options:\n");
 	printf("  --id=<num>             my ID number [extract from hostname]\n");
-	printf("  --verbose              be verbose (alias for --debug=5)\n");
+	printf("  --verbose,-V           be verbose (alias for --debug=5)\n");
 	printf("  --debug=<num>          set debugging level\n");
 	printf("  --help,-h              show this usage help screen\n");
 	printf("  --version,-v           show version and copying information\n");
@@ -60,7 +61,7 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 	int i, c;
 	char hostname[128];
 
-	static char *short_opts = "hvd";
+	static char *short_opts = "hvdV";
 	static struct option long_opts[] = {
 		/* name, has_arg, NULL, short_ch */
 		{ "verbose",    0, NULL,  1  },
@@ -76,6 +77,7 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		if (c == -1) break; /* end of options */
 
 		switch (c) {
+			case 'V':
 			case  1 : debug = 5; break;
 			case  2 : debug = atoi(optarg); break;
 			case 'h':
@@ -248,14 +250,43 @@ int parse_traffic(struct mg *mg)
 		rc = initialize(line);
 		if (rc != 0)
 			return rc;
-
-		/* schedule */
-		if (line->srcid == mg->options.myid)
-			evtimer_add(&line->ev, &line->tv);
 	}
 
 	fclose(fp);
 	return 0;
+}
+
+void heartbeat(int fd, short evtype, void *arg)
+{
+	static struct timeval tv = {3, 0};
+	struct mg *mg = arg;
+
+	dbg(11, "running=%d\n", mg->running);
+
+	/* TODO: garbage collector */
+
+	/* TODO: if everything is done, exit in 3 seconds
+	 * should rather take into account that we still can be receiving some packets */
+	if (mg->running == 0) {
+		mg->running--;
+		dbg(0, "Finished, exiting in 3 seconds...\n");
+		event_base_loopexit(mg->evb, &tv);
+	} else {
+		mgs_reschedule(&mg->hbev, &mg->hbs, 1000000);
+	}
+}
+
+void heartbeat_start(struct mg *mg)
+{
+	struct timeval now, tv = {0, 0};
+
+	gettimeofday(&now, NULL);
+	mg->hbs.last.tv_sec  = now.tv_sec;
+	mg->hbs.last.tv_usec = now.tv_usec;
+
+	/* schedule a hearbeat signal */
+	evtimer_set(&mg->hbev, heartbeat, mg);
+	evtimer_add(&mg->hbev, &tv);
 }
 
 int main(int argc, char *argv[])
@@ -288,19 +319,24 @@ int main(int argc, char *argv[])
 	if (parse_traffic(mg))
 		return 3;
 
+	/*
+	 * main loop
+	 */
+	
 	/* FIXME: naive synchronization of all nodes */
 	struct timeval tv;
 	while (true) {
 		gettimeofday(&tv, NULL);
-		if (tv.tv_sec % 10 == 0)
+		if (tv.tv_sec % 3 == 0 && tv.tv_usec < 100)
 			break;
 	}
-	dbg(0, "Starting on %d.%d\n", tv.tv_sec, tv.tv_usec);
+	dbg(0, "Starting\n");
 
-	/*
-	 * main loop
-	 */
-	/* TODO: make garbage collector */
+	/* schedule all */
+	mgs_all(mg);
+	heartbeat_start(mg);
+
+	/* loop */
 	event_base_dispatch(mg->evb);
 
 	/* cleanup */

@@ -111,7 +111,7 @@ void mgi_send(struct line *line, uint8_t *payload, int size)
 	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->mg->options.myid }};
 	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->dstid }};
 
-	dbg(9, "sending line %d: %d -> %d size %d\n",
+	dbg(3, "sending line %d: %d -> %d size %d\n",
 		line->line_num, line->mg->options.myid, line->dstid, size);
 
 	size -= PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE;

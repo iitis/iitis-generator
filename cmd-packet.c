@@ -4,7 +4,9 @@
  */
 
 #include "cmd-packet.h"
+#include "interface.h"
 #include "generator.h"
+#include "schedule.h"
 
 int cmd_packet_init(struct line *line)
 {
@@ -50,18 +52,15 @@ void cmd_packet_out(int fd, short evtype, void *arg)
 {
 	struct line *line = arg;
 	struct cmd_packet *cp = line->prv;
-	struct timeval tv;
 
 	/* send ASAP */
 	mgi_send(line, NULL, cp->len);
 
-	/* reschedule if requested */
-	cp->num--;
-	if (cp->num > 0) {
-		tv.tv_sec = cp->T / 1000000;
-		tv.tv_usec = cp->T % 1000000;
-		evtimer_add(&line->ev, &tv);
-	}
+	/* reschedule */
+	if (cp->num-- > 1)
+		mgs_usleep(line, cp->T);
+	else
+		line->mg->running--;
 }
 
 void cmd_packet_in(struct line *line, struct sniff_pkt *pkt)
