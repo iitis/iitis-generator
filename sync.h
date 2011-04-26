@@ -7,10 +7,10 @@
  * Source of first traffic line sends broadcast UDP to 255.255.255.255 */
 void mgc_sync(struct mg *mg);
 
-/** Sync master */
-void mgc_master(struct mg *mg);
+/** Send sync packet */
+void mgc_unlock(struct mg *mg, uint8_t key);
 
-/** Sync client */
-void mgc_slave(struct mg *mg);
+/** Wait for sync packet */
+void mgc_lock(struct mg *mg, uint8_t key);
 
 #endif
