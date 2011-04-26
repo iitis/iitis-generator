@@ -17,8 +17,6 @@
 void mgc_sync(struct mg *mg)
 {
 	int i;
-	struct timeval tv, rtt1, rtt2;
-	uint32_t rtt;
 
 	/* find first line */
 	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
@@ -34,28 +32,9 @@ void mgc_sync(struct mg *mg)
 		usleep(5000000);
 
 		mgc_unlock(mg, 1);
-		gettimeofday(&rtt1, NULL);
-		mgc_lock(mg, 2);
-		gettimeofday(&rtt2, NULL);
-
-		/* get RTT */
-		if (rtt2.tv_sec == rtt1.tv_sec + 1)
-			rtt = rtt2.tv_usec + (1000000 - rtt1.tv_usec);
-		else if (rtt2.tv_sec == rtt1.tv_sec)
-			rtt = rtt2.tv_usec - rtt1.tv_usec;
-		else
-			die("Too high sync RTT\n");
-
-		dbg(0, "Sync RTT = %uus\n", rtt);
-
-		mgc_unlock(mg, 3);
-//		usleep(rtt / 2);
 	} else { /* = slave */
 		dbg(0, "Waiting for master...\n");
-
 		mgc_lock(mg, 1);
-		mgc_unlock(mg, 2);  /* sends N-1 times */
-		mgc_lock(mg, 3);
 	}
 
 	/* XXX: all nodes should be on this line in the same time */
