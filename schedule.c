@@ -47,10 +47,12 @@ void mgs_reschedule(struct event *ev, struct schedule *sch, uint32_t time_us)
 	sch->last.tv_usec = wanted.tv_usec;
 
 	/* if it has already passed, schedule now */
-	if (wanted.tv_sec < now.tv_sec ||
-	    (wanted.tv_sec == now.tv_sec && wanted.tv_usec <= now.tv_usec)) {
-		dbg(5, "too late: wanted=%u.%u vs now=%u.%u\n",
-			wanted.tv_sec, wanted.tv_usec, now.tv_sec, now.tv_usec);
+	if (wanted.tv_sec < now.tv_sec) {
+		dbg(1, "lagging over 1s\n");
+		tv.tv_sec = 0;
+		tv.tv_usec = 0;
+	} else if (wanted.tv_sec == now.tv_sec && wanted.tv_usec <= now.tv_usec) {
+		dbg(3, "lagging %uus\n", now.tv_usec - wanted.tv_usec);
 		tv.tv_sec = 0;
 		tv.tv_usec = 0;
 	} else {

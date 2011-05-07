@@ -36,7 +36,7 @@ int cmd_packet_init(struct line *line)
 				cp->num = atoi(line->argv[2]);
 				break;
 			case 3:
-				cp->T = atoi(line->argv[3]);
+				cp->T = atoi(line->argv[3]) * 1000;
 				break;
 		}
 	}
