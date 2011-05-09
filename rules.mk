@@ -33,7 +33,7 @@ endif
 default: all
 all: version.h $(TARGETS)
 
-clean:
+clean-std:
 	-rm -f *.o $(TARGETS) *.core core version.h
 
 .SUFFIXES: .c

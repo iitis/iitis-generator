@@ -10,11 +10,19 @@ void mgs_all(struct mg *mg);
  * Uses absolute time to maintain accurate time pause
  * @param event      event
  * @param sch        scheduler info
- * @param time_us    time of pause [us] */
-void mgs_reschedule(struct event *ev, struct schedule *sch, uint32_t time_us);
+ * @param time       time of pause */
+void mgs_schedule(struct event *ev, struct schedule *sch, struct timeval *tv);
 
-/** Reschedule traffic line
+/** Version of mgs_reschedule_tv() accepting microseconds */
+void mgs_uschedule(struct event *ev, struct schedule *sch, uint32_t time_us);
+
+/** Schedule traffic line to run after given time
+ * @param tv         time of pause, if 0 take line->tv
  * @note uses mgs_reschedule() */
+void mgs_sleep(struct line *line, struct timeval *tv);
+
+/** Version of mgs_sleep_tv() accepting microseconds */
 void mgs_usleep(struct line *line, uint32_t time_us);
+
 
 #endif

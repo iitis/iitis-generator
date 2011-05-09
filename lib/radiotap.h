@@ -6,7 +6,6 @@
 #include <utime.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <pcap.h>
 #include <endian.h>
 
 typedef unsigned int u32;

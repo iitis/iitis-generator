@@ -11,4 +11,7 @@ generator: $(C_OBJECTS)
 	make -C lib
 	$(CC) $(C_OBJECTS) $(LDFLAGS) -o generator
 
+clean: clean-std
+	$(MAKE) -C lib clean
+
 install: install-std

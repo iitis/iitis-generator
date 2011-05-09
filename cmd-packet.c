@@ -10,10 +10,11 @@
 
 int cmd_packet_init(struct line *line)
 {
+	struct mg *mg = line->mg;
 	int i;
 	struct cmd_packet *cp;
 
-	cp = mmatic_zalloc(sizeof(struct cmd_packet), line);
+	cp = mmatic_zalloc(mg->mm, sizeof(struct cmd_packet));
 
 	/* defaults */
 	cp->len = 100;
@@ -27,7 +28,7 @@ int cmd_packet_init(struct line *line)
 
 				if (cp->len < PKT_TOTAL_OVERHEAD) {
 					dbg(0, "%s: line %d: frame too short (%d < %d)\n",
-						line->mg->options.traf_file, line->line_num,
+						mg->options.traf_file, line->line_num,
 						cp->len, PKT_TOTAL_OVERHEAD);
 					return 2;
 				}

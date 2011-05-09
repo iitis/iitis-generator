@@ -342,13 +342,12 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 		mg->interface[i].mg = mg;
 		mg->interface[i].num = i;
 		mg->interface[i].fd = fd;
-		mg->interface[i].evread = mmatic_alloc(sizeof(struct event), mg->mm);
 
 		/* monitor for incoming packets */
-		event_set(mg->interface[i].evread,
+		event_set(&mg->interface[i].evread,
 			fd, EV_READ | EV_PERSIST, _mgi_sniff, &mg->interface[i]);
 
-		event_add(mg->interface[i].evread, NULL);
+		event_add(&mg->interface[i].evread, NULL);
 	}
 
 	return count;

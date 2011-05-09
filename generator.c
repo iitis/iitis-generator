@@ -162,10 +162,10 @@ int parse_traffic(struct mg *mg)
 		if (buf[0] == '#' || buf[0] == '\r' || buf[0] == '\n')
 			continue;
 
-		line = mmatic_zalloc(sizeof *line, mg->mm);
+		line = mmatic_zalloc(mg->mm, sizeof *line);
 		line->mg = mg;
 		line->line_num = line_num;
-		line->contents = mmatic_strdup(buf, line);
+		line->contents = mmatic_strdup(mg->mm, buf);
 		mg->lines[line_num] = line;
 
 		i = j = token = 0;
@@ -185,7 +185,7 @@ int parse_traffic(struct mg *mg)
 
 						for (; i < j; i++) {
 							if (buf[i] == '.') {
-								line->tv.tv_usec = atoi(buf + i + 1);
+								line->tv.tv_usec = atoi(buf + i + 1) * 1000;
 								break;
 							}
 						}
@@ -218,7 +218,7 @@ int parse_traffic(struct mg *mg)
 						line->noack = atoi(buf+i);
 						break;
 					case 7:
-						line->cmd = mmatic_strdup(buf+i, mg->mm);
+						line->cmd = mmatic_strdup(mg->mm, buf+i);
 						/* NB: fall-through */
 					default:
 						if (line->argc == LINE_ARGS_MAX - 1) {
@@ -227,7 +227,7 @@ int parse_traffic(struct mg *mg)
 							return 2;
 						}
 
-						line->argv[line->argc++] = mmatic_strdup(buf+i, mg->mm);
+						line->argv[line->argc++] = mmatic_strdup(mg->mm, buf+i);
 						break;
 				}
 
@@ -238,6 +238,9 @@ int parse_traffic(struct mg *mg)
 		} while(buf[j]);
 
 		line->argv[line->argc] = NULL;
+
+		if (!line->cmd)
+			continue;
 
 		/* choose handler for command
 		 * in future?: change to dynamic loader and dlsym() */
@@ -273,7 +276,7 @@ void heartbeat(int fd, short evtype, void *arg)
 		dbg(0, "Finished, exiting in 3 seconds...\n");
 		event_base_loopexit(mg->evb, &tv);
 	} else {
-		mgs_reschedule(&mg->hbev, &mg->hbs, 1000000);
+		mgs_uschedule(&mg->hbev, &mg->hbs, 1000000);
 	}
 }
 

@@ -81,17 +81,19 @@ struct interface {
 	struct mg *mg;             /** root */
 	int num;                   /** interface number */
 	int fd;                    /** raw interface socket */
-	struct event *evread;      /** read event */
+	struct event evread;       /** read event */
 };
 
 /** Main data structure, root for all data */
 struct mg {
 	mmatic *mm;                /** global memory manager */
 	mmatic *mmtmp;             /** mm that can be freed anytime in main() */
-	struct event_base *evb;    /** libevent base */
 
+	struct event_base *evb;    /** libevent base */
 	struct event hbev;         /** heartbeat event */
 	struct schedule hbs;       /** heartbeat schedule info */
+
+	struct timeval origin;     /** time origin (same on all nodes) */
 
 	/** command line options */
 	struct {
@@ -110,8 +112,9 @@ struct mg {
 
 /** mg frame format */
 struct mg_hdr {
-#define MG_TAG_V1 0xFEEEED01
 	uint32_t mg_tag;           /** mg protocol tag */
+#define MG_TAG_V1 0xFEEEED01
+
 	uint32_t time_s;           /** local time: seconds */
 	uint32_t time_us;          /** local time: microseconds */
 	uint32_t line_num;         /** traffic file line number */
@@ -147,6 +150,36 @@ struct sniff_pkt {
 	uint8_t *payload;             /** payload after mg header */
 	uint32_t paylen;              /** payload length */
 };
+
+/** message sent during time synchronization phase */
+struct mg_sync_hdr {
+	uint32_t code;                /** code */
+#define MG_SYNC_OFFER 0x12340000
+#define MG_SYNC_ACK   0xBAAABAAA
+
+	uint8_t  node;                /** source node */
+	uint32_t try;                 /** try number */
+	uint32_t time_s;              /** start time: seconds */
+	uint32_t time_us;             /** start time: microseconds */
+};
+
+/** structure used during synchronization phase */
+struct mg_sync {
+	struct mg *mg;                /** data root */
+	struct mg_sync_hdr hdr;       /** last sync packet */
+	int s;                        /** socket */
+
+	struct event_base *evb;       /** event base */
+	struct event evr;             /** read event */
+	struct event evt;             /** timeout event */
+
+	uint8_t node_min;             /** lowest node id */
+	uint8_t node_max;             /** highest node id */
+	uint32_t node_count;          /** number of nodes */
+	uint8_t *exist;               /** 0 = nonexistent, 1 = exists */
+	uint8_t *acked;               /** 1 = acked to time offer */
+};
+
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
 extern const uint8_t REVERSE[256];
