@@ -99,7 +99,7 @@ int mgi_inject(struct interface *interface,
 	}
 }
 
-void mgi_send(struct line *line, uint8_t *payload, int size)
+void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 {
 	uint8_t pkt[PKT_BUFSIZE];
 	struct mg_hdr *mg_hdr;
@@ -131,30 +131,29 @@ void mgi_send(struct line *line, uint8_t *payload, int size)
 	mg_hdr->time_s   = htonl(timestamp.tv_sec);
 	mg_hdr->time_us  = htonl(timestamp.tv_usec);
 	mg_hdr->line_num = htonl(line->line_num);
-	mg_hdr->line_ctr = htonl(line->line_ctr++);
+	mg_hdr->line_ctr = htonl(++line->line_ctr);
 
 	/* fill the rest */
-	j = 0;
-	if (payload) {
-		for (i = sizeof *mg_hdr; i < size; i++) {
-			pkt[i] = payload[j++];
-		}
-	} else {
-		for (i = sizeof *mg_hdr; i < size; i++) {
-			pkt[i] = line->contents[j];
+	i = sizeof *mg_hdr;
 
-			if (line->contents[j] == '\0')
-				j = 0;
-			else
-				j++;
-		}
+	if (payload) {
+		for (j = 0; i < size && j < payload_size; i++)
+			pkt[i] = payload[j++];
+	}
+
+	for (j = 0; i < size; i++) {
+		pkt[i] = line->contents[j];
+
+		if (line->contents[j] == '\0')
+			j = 0;
+		else
+			j++;
 	}
 
 	/* send */
 	mgi_inject(interface, &bssid, &dstmac, &srcmac, PKT_ETHERTYPE, (void *) pkt, (size_t) size);
 }
 
-/* TODO: handle retried frames */
 static void _mgi_sniff(int fd, short event, void *arg)
 {
 	struct interface *interface = arg;
@@ -165,6 +164,7 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	struct mg_hdr *mg_hdr;
 
 	gettimeofday(&pkt.timestamp, NULL);
+	memset((void *) &pkt, 0, sizeof pkt);
 
 	ret = recvfrom(fd, pkt.pkt, PKT_BUFSIZE, MSG_DONTWAIT, NULL, NULL);
 	if (ret <= 0) {
@@ -302,11 +302,29 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		return;
 	}
 
+	if (pkt.mg_hdr.line_num >= TRAFFIC_LINE_MAX) {
+		dbg(1, "received too high line number: %d\n", pkt.mg_hdr.line_num);
+		return;
+	}
+
+	pkt.line = interface->mg->lines[pkt.mg_hdr.line_num];
+	if (!pkt.line) {
+		dbg(1, "received invalid line number: %d\n", pkt.mg_hdr.line_num);
+		return;
+	}
+
+	/* dont drop - may be needed for stats */
+	if (pkt.mg_hdr.line_ctr == pkt.line->line_ctr_rcv) {
+		pkt.dupe = 1;
+	}
+
 	pkt.payload = (uint8_t *) mg_hdr + sizeof *mg_hdr;
 	pkt.paylen  = pkt.size - PKT_HEADERS_SIZE - PKT_IEEE80211_FCSSIZE;
 
 	/* pass to higher layers */
 	interface->mg->packet_cb(&pkt);
+
+	pkt.line->line_ctr_rcv = pkt.mg_hdr.line_ctr;
 }
 
 int mgi_init(struct mg *mg, mgi_packet_cb cb)

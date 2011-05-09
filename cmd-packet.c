@@ -55,7 +55,7 @@ void cmd_packet_out(int fd, short evtype, void *arg)
 	struct cmd_packet *cp = line->prv;
 
 	/* send ASAP */
-	mgi_send(line, NULL, cp->len);
+	mgi_send(line, NULL, 0, cp->len);
 
 	/* reschedule */
 	if (cp->num-- > 1)
@@ -64,12 +64,14 @@ void cmd_packet_out(int fd, short evtype, void *arg)
 		line->mg->running--;
 }
 
-void cmd_packet_in(struct line *line, struct sniff_pkt *pkt)
+void cmd_packet_in(struct sniff_pkt *pkt)
 {
-	struct cmd_packet *cp = line->prv;
+	struct cmd_packet *cp = pkt->line->prv;
 
-	if (cp->last_ctr && cp->last_ctr + 1 != pkt->mg_hdr.line_ctr) {
-		dbg(1, "line %u: lost: wanted=%u\n", line->line_num, cp->last_ctr + 1);
+	if (cp->last_ctr) {
+		if (cp->last_ctr + 1 != pkt->mg_hdr.line_ctr) {
+			dbg(1, "line %u: lost: wanted=%u\n", pkt->line->line_num, cp->last_ctr + 1);
+		}
 	}
 
 	cp->last_ctr = pkt->mg_hdr.line_ctr;

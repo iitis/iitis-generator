@@ -30,12 +30,13 @@ int mgi_inject(struct interface *interface,
 	uint16_t ether_type, void *data, size_t len);
 
 /** Send mg frame
- * A high-level interface to mgi_inject(). If payload is NULL, its constructed from contents of
- * configuration file line.
- * @param line       traffic file line
- * @param payload    payload, may be NULL
- * @param size       desired total frame length in air, including all headers,
- *                   that is PKT_TOTAL_OVERHEAD */
-void mgi_send(struct line *line, uint8_t *payload, int size);
+ * A high-level interface to mgi_inject(). If payload is NULL or not long enough, its constructed
+ * from contents of configuration file line.
+ * @param line         traffic file line
+ * @param payload      payload, may be NULL
+ * @param payload_size bytes available under payload
+ * @param size         desired total frame length in air, including all headers,
+ *                     that is PKT_TOTAL_OVERHEAD */
+void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size);
 
 #endif

@@ -59,6 +59,7 @@ struct line {
 	struct event ev;                 /** libevent handle */
 	uint32_t line_num;               /** line number in traffic file */
 	uint32_t line_ctr;               /** line counter for sending */
+	uint32_t line_ctr_rcv;           /** line counter for receiving */
 	struct schedule schedule;        /** scheduler info */
 
 	const char *contents;            /** line contents */
@@ -125,6 +126,7 @@ struct mg_hdr {
 struct sniff_pkt {
 	struct interface *interface;  /** interface packet arrived on */
 	uint8_t pkt[PKT_BUFSIZE];     /** raw frame */
+	bool dupe;                    /** if 1, its a duplicate */
 
 	struct {
 		uint64_t tsft;            /** time [us] */
@@ -149,6 +151,8 @@ struct sniff_pkt {
 
 	uint8_t *payload;             /** payload after mg header */
 	uint32_t paylen;              /** payload length */
+
+	struct line *line;            /** matching line */
 };
 
 /** message sent during time synchronization phase */

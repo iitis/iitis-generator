@@ -113,21 +113,10 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 /** Pass incoming packet to proper handler */
 void handle_packet(struct sniff_pkt *pkt)
 {
-	struct line *line;
+	/* TODO: stats (remember to drop duplicates) */
 
-	if (pkt->mg_hdr.line_num >= TRAFFIC_LINE_MAX) {
-		dbg(1, "received too big line number: %d\n", pkt->mg_hdr.line_num);
-		return;
-	}
-
-	line = pkt->interface->mg->lines[pkt->mg_hdr.line_num];
-	if (!line) {
-		dbg(1, "received invalid line number: %d\n", pkt->mg_hdr.line_num);
-		return;
-	}
-
-	if (streq(line->cmd, "packet")) {
-		cmd_packet_in(line, pkt);
+	if (streq(pkt->line->cmd, "packet")) {
+		cmd_packet_in(pkt);
 	}
 
 	return;
