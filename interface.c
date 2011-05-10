@@ -123,6 +123,10 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 		return;
 	}
 
+	/* if NOACK, set broadcast bit */
+	if (line->noack)
+		dstmac.ether_addr_octet[0] |= 0x01;
+
 	/* fill the header */
 	gettimeofday(&timestamp, NULL);
 
