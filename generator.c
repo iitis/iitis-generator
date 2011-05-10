@@ -251,22 +251,25 @@ int parse_traffic(struct mg *mg)
 
 void heartbeat(int fd, short evtype, void *arg)
 {
-	static struct timeval tv = {3, 0};
+	static struct timeval now, diff, tv = {0, 0};
 	struct mg *mg = arg;
-
-	dbg(11, "running=%d\n", mg->running);
 
 	/* TODO: garbage collector */
 
-	/* TODO: if everything is done, exit in 3 seconds
-	 * should rather take into account that we still can be receiving some packets */
+	/* if no line generator is running and there was no packet to us in last 10 seconds - exit */
 	if (mg->running == 0) {
-		mg->running--;
-		dbg(0, "Finished, exiting in 3 seconds...\n");
-		event_base_loopexit(mg->evb, &tv);
-	} else {
-		mgs_uschedule(&mg->hbev, &mg->hbs, 1000000);
+		gettimeofday(&now, NULL);
+		timersub(&now, &mg->last, &diff);
+
+		if (diff.tv_sec >= 10) {
+			dbg(0, "Finished, exiting...\n");
+			mg->running--;
+			event_base_loopexit(mg->evb, &tv);
+			return;
+		}
 	}
+
+	mgs_uschedule(&mg->hbev, &mg->hbs, 1000000);
 }
 
 void heartbeat_start(struct mg *mg)
@@ -322,6 +325,7 @@ int main(int argc, char *argv[])
 	/* schedule all */
 	mgs_all(mg);
 	heartbeat_start(mg);
+	gettimeofday(&mg->last, NULL);
 
 	/* loop */
 	event_base_dispatch(mg->evb);

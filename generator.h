@@ -108,7 +108,9 @@ struct mg {
 
 	/** traffic file lines (NB: sparse) */
 	struct line *lines[TRAFFIC_LINE_MAX];
+
 	int running;               /** number of still "running" lines */
+	struct timeval last;       /** time of last frame destined to us */
 };
 
 /** mg frame format */
