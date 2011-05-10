@@ -162,10 +162,8 @@ int parse_traffic(struct mg *mg)
 			if (buf[j] == '\0' || buf[j] == ' ' || buf[j] == '\r' || buf[j] == '\n') {
 				token++;
 
-				if (buf[j]) {
-					buf[j] = '\0';
-					j++;
-				}
+				if (buf[j])
+					buf[j++] = '\0';
 
 				/* FORMAT: time interface_num src dst rate noack? command params... */
 				switch (token) {
@@ -201,7 +199,7 @@ int parse_traffic(struct mg *mg)
 						line->dstid = atoi(buf+i);
 						break;
 					case 5:
-						line->rate = atoi(buf+i); /* NB: "auto" => 0 */
+						line->rate = atoi(buf+i) * 2; /* NB: "auto" => 0 */
 						break;
 					case 6:
 						line->noack = atoi(buf+i);
@@ -219,6 +217,9 @@ int parse_traffic(struct mg *mg)
 						line->argv[line->argc++] = mmatic_strdup(mg->mm, buf+i);
 						break;
 				}
+
+				while (buf[j] == ' ')
+					j++;
 
 				i = j;
 			} else {

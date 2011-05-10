@@ -19,6 +19,7 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb);
  * @param bssid      BSSID
  * @param dst        destination MAC
  * @param src        source MAC
+ * @param rate       bitrate [in 0.5Mbps]
  * @param ether_type ethernet type, set 0x0800 for IPv4
  * @param data       raw link-layer frame
  * @param len        frame length
@@ -26,7 +27,7 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb);
  * @retval -1        sendmsg() failed
  */
 int mgi_inject(struct interface *interface,
-	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
+	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src, uint8_t rate,
 	uint16_t ether_type, void *data, size_t len);
 
 /** Send mg frame

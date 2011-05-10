@@ -21,29 +21,28 @@
 
 /* Code inspired by hostap.git/wlantest/inject.c */
 int mgi_inject(struct interface *interface,
-	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src,
+	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src, uint8_t rate,
 	uint16_t ether_type, void *data, size_t len)
 {
 	int ret;
 
 	dbg(15, "interface=%d len=%d\n", interface->num, len);
 
-	/******************** static! **************************/
 	/* radiotap header
 	 * NOTE: this is always LSB!
 	 * SEE: Documentation/networking/mac80211-injection.txt
 	 * SEE: include/net/ieee80211_radiotap.h */
-	static uint8_t rtap_hdr[PKT_RADIOTAP_HDRSIZE] = {
+	uint8_t rtap_hdr[PKT_RADIOTAP_HDRSIZE] = {
 		0x00, 0x00,             /* radiotap version */
-		0x08, 0x00,             /* radiotap length */
-		0x00, 0x00, 0x00, 0x00
+		0x0a, 0x00,             /* radiotap length */
+		0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00
 	};
 
 	/* LLC Encapsulated Ethernet header */
-	static uint8_t llc_hdr[PKT_LLC_HDRSIZE] = {
+	uint8_t llc_hdr[PKT_LLC_HDRSIZE] = {
 		0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00, PKT_ETHERTYPE >> 8, PKT_ETHERTYPE & 0xff
 	};
-	/******************************************************/
 
 	/* 802.11 header - IBSS data frame */
 	uint8_t ieee80211_hdr[PKT_IEEE80211_HDRSIZE] = {
@@ -87,6 +86,11 @@ int mgi_inject(struct interface *interface,
 	};
 
 	/******************/
+	if (rate) {
+		rtap_hdr[4] |= (1 << IEEE80211_RADIOTAP_RATE);
+		rtap_hdr[8]  = rate;
+	}
+
 	memcpy(ieee80211_hdr +  4,   dst, sizeof *dst);
 	memcpy(ieee80211_hdr + 10,   src, sizeof *src);
 	memcpy(ieee80211_hdr + 16, bssid, sizeof *bssid);
@@ -155,7 +159,8 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 	}
 
 	/* send */
-	mgi_inject(interface, &bssid, &dstmac, &srcmac, PKT_ETHERTYPE, (void *) pkt, (size_t) size);
+	mgi_inject(interface, &bssid, &dstmac, &srcmac, line->rate,
+		PKT_ETHERTYPE, (void *) pkt, (size_t) size);
 }
 
 static void _mgi_sniff(int fd, short event, void *arg)

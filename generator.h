@@ -24,7 +24,7 @@
 /** EtherType for generated packets */
 #define PKT_ETHERTYPE 0x0111
 
-#define PKT_RADIOTAP_HDRSIZE 8
+#define PKT_RADIOTAP_HDRSIZE 10
 #define PKT_IEEE80211_HDRSIZE 24
 #define PKT_IEEE80211_FCSSIZE 4
 #define PKT_LLC_HDRSIZE 8
