@@ -197,10 +197,13 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	ieee80211_hdr = (uint8_t *) pkt.pkt + parser.max_length;
 
 	/* skip non-data frames */
-	if (!(ieee80211_hdr[0] == 0x08 && ieee80211_hdr[1] == 0x00)) {
+	if (!(ieee80211_hdr[0] == 0x08 &&
+	     (ieee80211_hdr[1] == 0x00 || ieee80211_hdr[1] == 0x08))) {
 		dbg(14, "skipping non-data frame\n");
 		return;
 	}
+
+	/* TODO: hdr[1] == 0x08 stats (means "retried") */
 
 	/* skip invalid BSSID */
 	if (!(ieee80211_hdr[16] == 0x06 &&
@@ -313,7 +316,10 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		return;
 	}
 
-	/* dont drop - may be needed for stats */
+	/* store time of last frame destined to us */
+	gettimeofday(&interface->mg->last, NULL);
+
+	/* handle duplicates - dont drop - may be needed for stats */
 	if (pkt.mg_hdr.line_ctr == pkt.line->line_ctr_rcv) {
 		pkt.dupe = 1;
 	}
