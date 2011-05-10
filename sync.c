@@ -53,6 +53,9 @@ void _master_read(int s, short evtype, void *arg)
 	    ntohl(hdr.time_us) != ntohl(mgs->hdr.time_us))
 		return;
 
+	if (hdr.node > mgs->node_max)
+		return;
+
 	dbg(1, "received time sync ACK from node %u: %lu\n", hdr.node, ntohl(hdr.time_s));
 	mgs->acked[hdr.node] = 1;
 
@@ -210,6 +213,12 @@ void mgc_sync(struct mg *mg)
 
 		if (mg->lines[i]->srcid > mgs.node_max)
 			mgs.node_max = mg->lines[i]->srcid;
+
+		if (mg->lines[i]->dstid < mgs.node_min)
+			mgs.node_min = mg->lines[i]->dstid;
+
+		if (mg->lines[i]->dstid > mgs.node_max)
+			mgs.node_max = mg->lines[i]->dstid;
 	}
 
 	if (!mgs.node_max) {
@@ -225,17 +234,23 @@ void mgc_sync(struct mg *mg)
 		if (!mg->lines[i])
 			continue;
 
-		if (mgs.exist[mg->lines[i]->srcid])
-			continue;
+		if (!mgs.exist[mg->lines[i]->srcid]) {
+			mgs.exist[mg->lines[i]->srcid] = 1;
+			mgs.node_count++;
+		}
 
-		mgs.exist[mg->lines[i]->srcid] = 1;
-		mgs.node_count++;
+		if (!mgs.exist[mg->lines[i]->dstid]) {
+			mgs.exist[mg->lines[i]->dstid] = 1;
+			mgs.node_count++;
+		}
 	}
 
 	if (mg->options.myid == mgs.node_min) /* master */
 		_master(&mgs);
-	else /* slave */
+	else if (mgs.exist[mg->options.myid]) /* slave */
 		_slave(&mgs);
+	else
+		dbg(0, "Not in traffic file - not syncing\n");
 
 	event_base_free(mgs.evb);
 	mmatic_freeptr(mgs.exist);
