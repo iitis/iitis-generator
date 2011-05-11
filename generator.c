@@ -1,5 +1,4 @@
 /*
- * ath9k monitor mode packet generator
  * Paweł Foremski <pjf@iitis.pl> 2011
  * IITiS PAN Gliwice
  */

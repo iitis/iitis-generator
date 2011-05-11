@@ -1,5 +1,5 @@
 /*
- * Author: Paweł Foremski <pjf@iitis.pl> 2011
+ * Paweł Foremski <pjf@iitis.pl> 2011
  * IITiS PAN Gliwice
  */
 

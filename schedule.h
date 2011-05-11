@@ -1,3 +1,8 @@
+/*
+ * Paweł Foremski <pjf@iitis.pl> 2011
+ * IITiS PAN Gliwice
+ */
+
 #ifndef _SCHEDULE_H_
 #define _SCHEDULE_H_
 

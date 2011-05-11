@@ -1,3 +1,8 @@
+/*
+ * Paweł Foremski <pjf@iitis.pl> 2011
+ * IITiS PAN Gliwice
+ */
+
 #ifndef _CMD_PACKET_H_
 #define _CMD_PACKET_H_
 
