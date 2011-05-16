@@ -23,9 +23,16 @@
 /** EtherType for generated packets */
 #define PKT_ETHERTYPE 0x0111
 
+/** radiotap header size */
 #define PKT_RADIOTAP_HDRSIZE 10
+
+/** ieee802.11 header size */
 #define PKT_IEEE80211_HDRSIZE 24
+
+/** ieee802.11 footer size (FCS field) */
 #define PKT_IEEE80211_FCSSIZE 4
+
+/** link layer control header size */
 #define PKT_LLC_HDRSIZE 8
 
 /** Length of all frame headers "in the air" */
@@ -36,6 +43,15 @@
 
 /** Maximum number of lines in traffic file */
 #define TRAFFIC_LINE_MAX 10000
+
+/** Default output root directory */
+#define DEFAULT_STATS_ROOT "./out"
+
+/** Write statistics each 1 second by default */
+#define DEFAULT_STATS_PERIOD 1
+
+/** Heartbeat period */
+#define HEARTBEAT_PERIOD 1000000
 
 struct mg;
 struct interface;
@@ -49,20 +65,21 @@ typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
 
 /** Scheduler info */
 struct schedule {
+	struct event ev;                 /** libevent handle */
 	struct timeval last;             /** absolute time of last schedule request */
 };
 
 /** Traffic file line */
 struct line {
 	struct mg *mg;                   /** root */
-	struct event ev;                 /** libevent handle */
+	struct schedule schedule;        /** scheduler info */
+
 	uint32_t line_num;               /** line number in traffic file */
 	uint32_t line_ctr;               /** line counter for sending */
 	uint32_t line_ctr_rcv;           /** line counter for receiving */
-	struct schedule schedule;        /** scheduler info */
 
 	const char *contents;            /** line contents */
-	struct timeval tv;               /** time anchor */
+	struct timeval tv;               /** time of first packet (time anchor) */
 	struct interface *interface;     /** interface number */
 	uint8_t srcid;                   /** src id */
 	uint8_t dstid;                   /** dst id */
@@ -74,6 +91,8 @@ struct line {
 
 	const char *cmd;                 /** command name */
 	void *prv;                       /** command private data */
+
+	ut *stats;                       /** statistics */
 };
 
 /** Represents network interface */
@@ -90,15 +109,17 @@ struct mg {
 	mmatic *mmtmp;             /** mm that can be freed anytime in main() */
 
 	struct event_base *evb;    /** libevent base */
-	struct event hbev;         /** heartbeat event */
 	struct schedule hbs;       /** heartbeat schedule info */
 
 	struct timeval origin;     /** time origin (same on all nodes) */
 
 	/** command line options */
 	struct {
-		uint8_t myid;          /** my id number */
-		const char *traf_file; /** traffic file path */
+		uint8_t myid;           /** my id number */
+		const char *traf_file;  /** traffic file path */
+		uint32_t stats;         /** time between stats write */
+		const char *stats_root; /** stats root directory */
+		const char *stats_name; /** stats directory */
 	} options;
 
 	/** interfaces - see interface.c */
@@ -110,6 +131,11 @@ struct mg {
 
 	int running;               /** number of still "running" lines */
 	struct timeval last;       /** time of last frame destined to us */
+
+	/* stats */
+	struct schedule statss;    /** stats scheduler info */
+	const char *stats_dir;     /** final stats dir path */
+	thash *stats_files;        /** stats files: file path -> FILE *fh */
 };
 
 /** mg frame format */

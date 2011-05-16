@@ -13,6 +13,7 @@
 #include "cmd-packet.h"
 #include "schedule.h"
 #include "sync.h"
+#include "stats.h"
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
 const uint8_t REVERSE[256] =
@@ -37,6 +38,9 @@ static void help(void)
 	printf("\n");
 	printf("Options:\n");
 	printf("  --id=<num>             my ID number [extract from hostname]\n");
+	printf("  --stats=<num>          generate statistics each <num> seconds [%u]\n", DEFAULT_STATS_PERIOD);
+	printf("  --root=<dir>           statistics output dir root [%s]\n", DEFAULT_STATS_ROOT);
+	printf("  --name=<name>          dir name under --root [./$date/$id]\n");
 	printf("  --verbose,-V           be verbose (alias for --debug=5)\n");
 	printf("  --debug=<num>          set debugging level\n");
 	printf("  --help,-h              show this usage help screen\n");
@@ -69,8 +73,14 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		{ "help",       0, NULL,  3  },
 		{ "version",    0, NULL,  4  },
 		{ "id",         1, NULL,  5  },
+		{ "root",       1, NULL,  6  },
+		{ "name",       1, NULL,  7  },
+		{ "stats",      1, NULL,  8  },
 		{ 0, 0, 0, 0 }
 	};
+
+	mg->options.stats      = DEFAULT_STATS_PERIOD;
+	mg->options.stats_root = DEFAULT_STATS_ROOT;
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_opts, long_opts, &i);
@@ -85,6 +95,9 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 			case 'v':
 			case  4 : version(); return 2;
 			case  5 : mg->options.myid = atoi(optarg); break;
+			case  6 : mg->options.stats_root = mmatic_strdup(mg->mm, optarg); break;
+			case  7 : mg->options.stats_name = mmatic_strdup(mg->mm, optarg); break;
+			case  8 : mg->options.stats = atoi(optarg); break;
 			default: help(); return 1;
 		}
 	}
@@ -110,7 +123,7 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 }
 
 /** Pass incoming packet to proper handler */
-void handle_packet(struct sniff_pkt *pkt)
+static void handle_packet(struct sniff_pkt *pkt)
 {
 	/* TODO: stats (remember to drop duplicates) */
 
@@ -126,7 +139,7 @@ void handle_packet(struct sniff_pkt *pkt)
  * @retval 1 syntax error
  * @retval 2 logic error
  */
-int parse_traffic(struct mg *mg)
+static int parse_traffic(struct mg *mg)
 {
 	FILE *fp;
 	char buf[BUFSIZ];
@@ -236,10 +249,16 @@ int parse_traffic(struct mg *mg)
 		if (streq(line->cmd, "packet")) {
 			handle = cmd_packet_out;
 			initialize = cmd_packet_init;
+		} else {
+			dbg(0, "%s: line %d: invalid command: %s\n",
+				mg->options.traf_file, line->line_num, line->cmd);
+			return 2;
 		}
 
+		line->stats = mgstats_db_create(mg);
+
 		/* prepare (may contain further line parsing) */
-		evtimer_set(&line->ev, handle, line);
+		evtimer_set(&line->schedule.ev, handle, line);
 		rc = initialize(line);
 		if (rc != 0)
 			return rc;
@@ -249,7 +268,7 @@ int parse_traffic(struct mg *mg)
 	return 0;
 }
 
-void heartbeat(int fd, short evtype, void *arg)
+static void heartbeat(int fd, short evtype, void *arg)
 {
 	static struct timeval now, diff, tv = {0, 0};
 	struct mg *mg = arg;
@@ -269,20 +288,13 @@ void heartbeat(int fd, short evtype, void *arg)
 		}
 	}
 
-	mgs_uschedule(&mg->hbev, &mg->hbs, 1000000);
+	mgs_uschedule(&mg->hbs, HEARTBEAT_PERIOD);
 }
 
-void heartbeat_start(struct mg *mg)
+static void heartbeat_init(struct mg *mg)
 {
-	struct timeval now, tv = {0, 0};
-
-	gettimeofday(&now, NULL);
-	mg->hbs.last.tv_sec  = now.tv_sec;
-	mg->hbs.last.tv_usec = now.tv_usec;
-
-	/* schedule a hearbeat signal */
-	evtimer_set(&mg->hbev, heartbeat, mg);
-	evtimer_add(&mg->hbev, &tv);
+	mgs_setup(&mg->hbs, mg, heartbeat, mg);
+	mgs_uschedule(&mg->hbs, HEARTBEAT_PERIOD);
 }
 
 int main(int argc, char *argv[])
@@ -315,19 +327,22 @@ int main(int argc, char *argv[])
 	if (parse_traffic(mg))
 		return 3;
 
+	/* synchronize */
+	mgc_sync(mg);
+
+	/* statistics aggregator / writer */
+	mgstats_init(mg);
+
+	/* heartbeat signal */
+	heartbeat_init(mg);
+
+	/* schedule all lines generators */
+	mgs_all(mg);
+
 	/*
 	 * main loop
 	 */
-	/* synchronize */
-	mgc_sync(mg);
 	dbg(0, "Starting\n");
-
-	/* schedule all */
-	mgs_all(mg);
-	heartbeat_start(mg);
-	gettimeofday(&mg->last, NULL);
-
-	/* loop */
 	event_base_dispatch(mg->evb);
 
 	/* cleanup */

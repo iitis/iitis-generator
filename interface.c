@@ -17,6 +17,7 @@
 #include "lib/radiotap.h"
 
 #include "generator.h"
+#include "stats.h"
 
 /* Code inspired by hostap.git/wlantest/inject.c */
 int mgi_inject(struct interface *interface,
@@ -328,8 +329,14 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	gettimeofday(&interface->mg->last, NULL);
 
 	/* handle duplicates - dont drop - may be needed for stats */
-	if (pkt.mg_hdr.line_ctr == pkt.line->line_ctr_rcv) {
+	n = pkt.mg_hdr.line_ctr - pkt.line->line_ctr_rcv;
+	if (n == 1) {
+		mgstats_db_count(pkt.line->stats, "received");
+	} else if (n < 1) {
 		pkt.dupe = 1;
+		mgstats_db_count(pkt.line->stats, "duplicates");
+	} else { /* n > 1 */
+		mgstats_db_count_num(pkt.line->stats, "lost", n - 1);
 	}
 
 	pkt.payload = (uint8_t *) mg_hdr + sizeof *mg_hdr;

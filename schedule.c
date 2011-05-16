@@ -25,7 +25,7 @@ void mgs_all(struct mg *mg)
 	}
 }
 
-void mgs_schedule(struct event *ev, struct schedule *sch, struct timeval *timeout)
+void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 {
 	struct timeval now, wanted, tv;
 
@@ -36,7 +36,7 @@ void mgs_schedule(struct event *ev, struct schedule *sch, struct timeval *timeou
 	sch->last.tv_sec  = wanted.tv_sec;
 	sch->last.tv_usec = wanted.tv_usec;
 
-	/* schedule */
+	/* calculate time distance */
 	gettimeofday(&now, NULL);
 	if (wanted.tv_sec < now.tv_sec) {
 		dbg(1, "lagging over 1s\n");
@@ -44,24 +44,33 @@ void mgs_schedule(struct event *ev, struct schedule *sch, struct timeval *timeou
 	} else {
 		timersub(&wanted, &now, &tv);
 	}
-	evtimer_add(ev, &tv);
+
+	/* schedule */
+	evtimer_add(&sch->ev, &tv);
 }
 
-void mgs_uschedule(struct event *ev, struct schedule *sch, uint32_t time_us)
+void mgs_uschedule(struct schedule *sch, uint32_t time_us)
 {
 	struct timeval tv;
 
 	tv.tv_sec  = time_us / 1000000;
 	tv.tv_usec = time_us % 1000000;
-	mgs_schedule(ev, sch, &tv);
+	mgs_schedule(sch, &tv);
 }
 
 void mgs_sleep(struct line *line, struct timeval *tv)
 {
-	mgs_schedule(&line->ev, &line->schedule, tv ? tv : &line->tv);
+	mgs_schedule(&line->schedule, tv ? tv : &line->tv);
 }
 
 void mgs_usleep(struct line *line, uint32_t time_us)
 {
-	mgs_uschedule(&line->ev, &line->schedule, time_us);
+	mgs_uschedule(&line->schedule, time_us);
+}
+
+void mgs_setup(struct schedule *sch, struct mg *mg, void (*cb)(int, short, void *), void *arg)
+{
+	sch->last.tv_sec  = mg->origin.tv_sec;
+	sch->last.tv_usec = mg->origin.tv_usec;
+	evtimer_set(&sch->ev, cb, arg);
 }
