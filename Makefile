@@ -8,7 +8,7 @@ TARGETS=generator
 include rules.mk
 
 generator: $(C_OBJECTS)
-	make -C lib
+	$(MAKE) -C lib
 	$(CC) $(C_OBJECTS) $(LDFLAGS) -o generator
 
 clean: clean-std

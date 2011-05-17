@@ -18,7 +18,7 @@
 #define LINE_ARGS_MAX 8
 
 /** size of a buffer for frames */
-#define PKT_BUFSIZE 2000
+#define PKT_BUFSIZE 1600
 
 /** EtherType for generated packets */
 #define PKT_ETHERTYPE 0x0111
@@ -26,8 +26,11 @@
 /** radiotap header size */
 #define PKT_RADIOTAP_HDRSIZE 10
 
-/** ieee802.11 header size */
+/** ieee802.11 header size (without FCS) */
 #define PKT_IEEE80211_HDRSIZE 24
+
+/** ieee802.11 ACK size (with FCS) */
+#define PKT_IEEE80211_ACKSIZE 14
 
 /** ieee802.11 footer size (FCS field) */
 #define PKT_IEEE80211_FCSSIZE 4
@@ -53,15 +56,14 @@
 /** Heartbeat period */
 #define HEARTBEAT_PERIOD 1000000
 
+/** Number of samples in link stats averages */
+#define LINK_EWMA_N 10
+
 struct mg;
 struct interface;
 struct sniff_pkt;
 struct line;
 struct schedule;
-
-/** Incoming frame callback type
- * @param pkt        captured frame */
-typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
 
 /** Scheduler info */
 struct schedule {
@@ -92,7 +94,8 @@ struct line {
 	const char *cmd;                 /** command name */
 	void *prv;                       /** command private data */
 
-	ut *stats;                       /** statistics */
+	ut *stats;                       /** statistics db */
+	ut *linkstats;                   /** link statistics db */
 };
 
 /** Represents network interface */
@@ -101,7 +104,32 @@ struct interface {
 	int num;                   /** interface number */
 	int fd;                    /** raw interface socket */
 	struct event evread;       /** read event */
+
+	ut *stats;                 /** statistics */
+	thash *linkstats_root;     /** link statistics dbs: "srcid-dstid" -> ut *linkstats */
 };
+
+/** A function which does statistics aggregation
+ * @param stats  stats db to export
+ * @param arg    arg passed to mgstats_writer_add()
+ * @retval true  proceed, write ut to file
+ * @retval false dont write ut to file
+ */
+typedef bool (*stats_writer_handler_t)(struct mg *mg, ut *stats, void *arg);
+
+/** Represents process of aggregation of statistics from many single sources and writing them to a
+ * statistics file */
+struct stats_writer {
+	stats_writer_handler_t handler;      /** callback handler */
+	void *arg;                           /** argument to pass to handler */
+	tlist *columns;                      /** column names to export */
+	const char *dirname;                 /** optional directory under main stats dir */
+	const char *filename;                /** stats file name */
+};
+
+/** Incoming frame callback type
+ * @param pkt        captured frame */
+typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
 
 /** Main data structure, root for all data */
 struct mg {
@@ -129,6 +157,7 @@ struct mg {
 	/** traffic file lines (NB: sparse) */
 	struct line *lines[TRAFFIC_LINE_MAX];
 
+	/* hearbeat */
 	int running;               /** number of still "running" lines */
 	struct timeval last;       /** time of last frame destined to us */
 
@@ -136,6 +165,7 @@ struct mg {
 	struct schedule statss;    /** stats scheduler info */
 	const char *stats_dir;     /** final stats dir path */
 	thash *stats_files;        /** stats files: file path -> FILE *fh */
+	tlist *stats_writers;      /** tlist of struct stats_writer */
 };
 
 /** mg frame format */

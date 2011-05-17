@@ -4,9 +4,9 @@
  */
 
 #include <getopt.h>
-#include <netinet/ether.h>
-#include <libpjf/main.h>
 #include <event.h>
+#include <unistd.h>
+#include <libpjf/main.h>
 
 #include "generator.h"
 #include "interface.h"
@@ -40,7 +40,7 @@ static void help(void)
 	printf("  --id=<num>             my ID number [extract from hostname]\n");
 	printf("  --stats=<num>          generate statistics each <num> seconds [%u]\n", DEFAULT_STATS_PERIOD);
 	printf("  --root=<dir>           statistics output dir root [%s]\n", DEFAULT_STATS_ROOT);
-	printf("  --name=<name>          dir name under --root [./$date/$id]\n");
+	printf("  --name=<name>          dir name under --root [date and time]\n");
 	printf("  --verbose,-V           be verbose (alias for --debug=5)\n");
 	printf("  --debug=<num>          set debugging level\n");
 	printf("  --help,-h              show this usage help screen\n");
@@ -255,13 +255,16 @@ static int parse_traffic(struct mg *mg)
 			return 2;
 		}
 
+		/* stats */
 		line->stats = mgstats_db_create(mg);
+		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
 
 		/* prepare (may contain further line parsing) */
 		evtimer_set(&line->schedule.ev, handle, line);
 		rc = initialize(line);
 		if (rc != 0)
 			return rc;
+
 	}
 
 	fclose(fp);
@@ -273,7 +276,9 @@ static void heartbeat(int fd, short evtype, void *arg)
 	static struct timeval now, diff, tv = {0, 0};
 	struct mg *mg = arg;
 
-	/* TODO: garbage collector */
+	sync();
+
+	/* TODO: garbage collector? */
 
 	/* if no line generator is running and there was no packet to us in last 10 seconds - exit */
 	if (mg->running == 0) {
@@ -317,6 +322,9 @@ int main(int argc, char *argv[])
 	mg->evb = event_init();
 	event_set_log_callback(libevent_log);
 
+	/* init stats so mgstats_aggregator_add() works */
+	mgstats_init(mg);
+
 	/* raw interfaces */
 	if (mgi_init(mg, handle_packet) <= 0) {
 		dbg(0, "no available interfaces found");
@@ -330,14 +338,14 @@ int main(int argc, char *argv[])
 	/* synchronize */
 	mgc_sync(mg);
 
-	/* statistics aggregator / writer */
-	mgstats_init(mg);
-
 	/* heartbeat signal */
 	heartbeat_init(mg);
 
 	/* schedule all lines generators */
-	mgs_all(mg);
+	mgs_schedule_all_lines(mg);
+
+	/* start stats */
+	mgstats_start(mg);
 
 	/*
 	 * main loop

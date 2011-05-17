@@ -6,7 +6,7 @@
 #include "schedule.h"
 #include "generator.h"
 
-void mgs_all(struct mg *mg)
+void mgs_schedule_all_lines(struct mg *mg)
 {
 	int i;
 

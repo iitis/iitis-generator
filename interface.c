@@ -19,6 +19,37 @@
 #include "generator.h"
 #include "stats.h"
 
+/** Aggregate stats from all lines */
+static bool _stats_aggregate_lines(struct mg *mg, ut *ut, void *arg)
+{
+	int i;
+
+	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
+		if (!mg->lines[i])
+			continue;
+
+		mgstats_db_aggregate(ut, mg->lines[i]->stats);
+	}
+
+	return true;
+}
+
+static bool _stats_write_interface(struct mg *mg, ut *dst, void *arg)
+{
+	struct interface *interface = arg;
+
+	mgstats_db_aggregate(dst, interface->stats);
+	return true;
+}
+
+static bool _stats_write_link(struct mg *mg, ut *dst, void *arg)
+{
+	mgstats_db_aggregate(dst, (ut *) arg);
+	return true;
+}
+
+/*****/
+
 /* Code inspired by hostap.git/wlantest/inject.c */
 int mgi_inject(struct interface *interface,
 	struct ether_addr *bssid, struct ether_addr *dst, struct ether_addr *src, uint8_t rate,
@@ -97,8 +128,12 @@ int mgi_inject(struct interface *interface,
 
 	ret = sendmsg(interface->fd, &msg, 0);
 	if (ret < 0) {
-		reterrno(-1, 1, "sendmsg");
+		mgstats_db_count(interface->stats, "snt_err");
+		reterrno(-1, 0, "sendmsg");
 	} else {
+		mgstats_db_count(interface->stats, "sent");
+		mgstats_db_count_num(interface->stats, "snt_bytes",
+			iov[1].iov_len + iov[2].iov_len + iov[3].iov_len);
 		return ret;
 	}
 }
@@ -120,10 +155,10 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 
 	size -= PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE;
 	if (size < sizeof *mg_hdr) {
-		dbg(1, "pkt too short\n");
+		dbg(0, "pkt too short\n");
 		return;
 	} else if (size > PKT_BUFSIZE) {
-		dbg(1, "pkt too long\n");
+		dbg(0, "pkt too long\n");
 		return;
 	}
 
@@ -175,6 +210,7 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	gettimeofday(&pkt.timestamp, NULL);
 	memset((void *) &pkt, 0, sizeof pkt);
 
+
 	ret = recvfrom(fd, pkt.pkt, PKT_BUFSIZE, MSG_DONTWAIT, NULL, NULL);
 	if (ret <= 0) {
 		if (errno != EAGAIN)
@@ -183,97 +219,61 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	}
 
 	/*
-	 * init
+	 * parse radiotap header
 	 */
 	if (ieee80211_radiotap_iterator_init(&parser, (void *) pkt.pkt, ret) < 0) {
 		dbg(1, "ieee80211_radiotap_iterator_init() failed\n");
 		return;
 	}
 
-	dbg(15, "interface=%d len=%d max_length=%d\n", interface->num, ret, parser.max_length);
-
-	pkt.interface = interface;
 	pkt.size = ret - parser.max_length;
+	pkt.interface = interface;
 
-	if (pkt.size < PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE + sizeof *mg_hdr) {
-		dbg(11, "skipping short frame\n");
-		return;
-	}
-
-	/*
-	 * parse IEEE 802.11 header
-	 */
-	ieee80211_hdr = (uint8_t *) pkt.pkt + parser.max_length;
-
-	/* skip non-data frames */
-	if (!(ieee80211_hdr[0] == 0x08 &&
-	     (ieee80211_hdr[1] == 0x00 || ieee80211_hdr[1] == 0x08))) {
-		dbg(14, "skipping non-data frame\n");
-		return;
-	}
-
-	/* TODO: hdr[1] == 0x08 stats (means "retried") */
-
-	/* skip invalid BSSID */
-	if (!(ieee80211_hdr[16] == 0x06 &&
-	      ieee80211_hdr[17] == 0xFE &&
-	      ieee80211_hdr[18] == 0xEE &&
-	      ieee80211_hdr[19] == 0xED &&
-	      ieee80211_hdr[20] == 0xFF)) {
-		dbg(9, "skipping invalid bssid frame\n");
-		return;
-	}
-
-	/* skip cross-channel transmissions */
-	if (!(ieee80211_hdr[21] == interface->num)) {
-		dbg(9, "skipping cross-channel frame\n");
-		return;
-	}
-
-	pkt.dstid = ieee80211_hdr[9];
-	pkt.srcid = ieee80211_hdr[15];
-
-	if (pkt.srcid == interface->mg->options.myid) {
-		dbg(13, "skipping local frame (%d)\n", pkt.srcid);
-		return;
-	}
-
-	/* drop frames not destined to us
-	 * NB: nice place for some inventions */
-	if (pkt.dstid != interface->mg->options.myid) {
-		dbg(9, "skipping not ours frame (%d)\n", pkt.dstid);
-		return;
-	}
-
-	/*
-	 * parse radiotap header
-	 */
 	memset(&(pkt.radio), 0, sizeof pkt.radio);
 	while ((n = ieee80211_radiotap_iterator_next(&parser)) == 0) {
 		switch (parser.this_arg_index) {
 			case IEEE80211_RADIOTAP_TSFT:
 				pkt.radio.tsft = le64toh(*((uint64_t *) parser.this_arg));
 				break;
+
 			case IEEE80211_RADIOTAP_FLAGS:
-				pkt.radio.flags.val      = *parser.this_arg;
-				pkt.radio.flags.cfp      = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_CFP;
-				pkt.radio.flags.shortpre = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_SHORTPRE;
-				pkt.radio.flags.frag     = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_FRAG;
-				pkt.radio.flags.badfcs   = pkt.radio.flags.val & IEEE80211_RADIOTAP_F_BADFCS;
+				pkt.radio.flags.val = *parser.this_arg;
+
+				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_CFP) {
+					pkt.radio.flags.cfp = true;
+					mgstats_db_count(interface->stats, "rcv_cfp");
+				}
+				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_SHORTPRE) {
+					pkt.radio.flags.shortpre = true;
+					mgstats_db_count(interface->stats, "rcv_shortpre");
+				}
+				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_FRAG) {
+					pkt.radio.flags.frag = true;
+					mgstats_db_count(interface->stats, "rcv_frag");
+				}
+				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_BADFCS) {
+					pkt.radio.flags.badfcs = true;
+					mgstats_db_count(interface->stats, "rcv_badfcs");
+				}
 				break;
+
 			case IEEE80211_RADIOTAP_RATE:
 				pkt.radio.rate = *(parser.this_arg);
 				break;
+
 			case IEEE80211_RADIOTAP_CHANNEL:
 				pkt.radio.freq = le16toh(*((uint16_t *) parser.this_arg));
 				/* NB: skip channel flags */
 				break;
+
 			case IEEE80211_RADIOTAP_DBM_ANTSIGNAL:
 				pkt.radio.rssi = *((int8_t *) parser.this_arg);
 				break;
+
 			case IEEE80211_RADIOTAP_ANTENNA:
 				pkt.radio.antnum = *(parser.this_arg);
 				break;
+
 			default:
 				dbg(3, "unhandled arg %d value %u\n",
 					parser.this_arg_index, *(parser.this_arg));
@@ -284,11 +284,13 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		return;
 	}
 
-	/* skip locally generated frames */
+	/* loopback filter */
 	if (pkt.radio.tsft == 0)
 		return;
 
-	/* skip frames with bad FCS */
+	mgstats_db_count(interface->stats, "received");
+	mgstats_db_count_num(interface->stats, "rcv_bytes", pkt.size);
+
 	if (pkt.radio.flags.badfcs) {
 		dbg(9, "skipping bad FCS frame\n");
 		return;
@@ -298,8 +300,72 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		pkt.radio.tsft, pkt.radio.rate / 2, pkt.radio.freq, pkt.radio.rssi, pkt.size);
 
 	/*
+	 * parse IEEE 802.11 header
+	 */
+	if (pkt.size < PKT_IEEE80211_HDRSIZE) {
+		if (pkt.size == PKT_IEEE80211_ACKSIZE) {
+			mgstats_db_count(interface->stats, "rcv_ack");
+		} else {
+			dbg(1, "skipping invalid short frame (%d)\n", pkt.size);
+			mgstats_db_count(interface->stats, "rcv_aliens");
+		}
+
+		return;
+	}
+
+	ieee80211_hdr = (uint8_t *) pkt.pkt + parser.max_length;
+	pkt.dstid = ieee80211_hdr[9];
+	pkt.srcid = ieee80211_hdr[15];
+
+	/* skip non-data frames */
+	if (ieee80211_hdr[0] != 0x08) {
+		if (ieee80211_hdr[0] == 0x80) {
+			mgstats_db_count(interface->stats, "rcv_beacons");
+		} else {
+			mgstats_db_count(interface->stats, "rcv_nondata");
+		}
+
+		return;
+	}
+
+	/* count ieee802.11 data retries */
+	if (ieee80211_hdr[1] & 0x08)
+		mgstats_db_count(interface->stats, "rcv_retry");
+
+	/* skip invalid BSSID */
+	if (!(ieee80211_hdr[16] == 0x06 &&
+	      ieee80211_hdr[17] == 0xFE &&
+	      ieee80211_hdr[18] == 0xEE &&
+	      ieee80211_hdr[19] == 0xED &&
+	      ieee80211_hdr[20] == 0xFF)) {
+		dbg(9, "skipping invalid bssid frame\n");
+		mgstats_db_count(interface->stats, "rcv_wrong_bssid");
+		return;
+	}
+
+	/* skip cross-channel transmissions */
+	if (!(ieee80211_hdr[21] == interface->num)) {
+		dbg(9, "skipping cross-channel frame\n");
+		mgstats_db_count(interface->stats, "rcv_wrong_channel");
+		return;
+	}
+
+	/* drop frames not destined to us */
+	if (pkt.dstid != interface->mg->options.myid) {
+		dbg(9, "skipping not ours frame (%d)\n", pkt.dstid);
+		mgstats_db_count(interface->stats, "rcv_wrong_dst");
+		return;
+	}
+
+	/*
 	 * parse mg header
 	 */
+	if (pkt.size < PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE + sizeof *mg_hdr) {
+		dbg(11, "skipping short alien frame\n");
+		mgstats_db_count(interface->stats, "rcv_aliens");
+		return;
+	}
+
 	mg_hdr = (struct mg_hdr *) (pkt.pkt + parser.max_length + PKT_HEADERS_SIZE);
 #define A(field) pkt.mg_hdr.field = ntohl(mg_hdr->field)
 	A(mg_tag);
@@ -310,18 +376,21 @@ static void _mgi_sniff(int fd, short event, void *arg)
 #undef A
 
 	if (pkt.mg_hdr.mg_tag != MG_TAG_V1) {
-		dbg(8, "skipping invalid mg tag frame (%x)\n", pkt.mg_hdr.mg_tag);
+		dbg(8, "skipping invalid mg tag alien frame (%x)\n", pkt.mg_hdr.mg_tag);
+		mgstats_db_count(interface->stats, "rcv_aliens");
 		return;
 	}
 
 	if (pkt.mg_hdr.line_num >= TRAFFIC_LINE_MAX) {
-		dbg(1, "received too high line number: %d\n", pkt.mg_hdr.line_num);
+		dbg(1, "received too high line number (%d) - alien?\n", pkt.mg_hdr.line_num);
+		mgstats_db_count(interface->stats, "rcv_aliens");
 		return;
 	}
 
 	pkt.line = interface->mg->lines[pkt.mg_hdr.line_num];
 	if (!pkt.line) {
-		dbg(1, "received invalid line number: %d\n", pkt.mg_hdr.line_num);
+		dbg(1, "received invalid line number (%d) - alien?\n", pkt.mg_hdr.line_num);
+		mgstats_db_count(interface->stats, "rcv_aliens");
 		return;
 	}
 
@@ -332,12 +401,22 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	n = pkt.mg_hdr.line_ctr - pkt.line->line_ctr_rcv;
 	if (n == 1) {
 		mgstats_db_count(pkt.line->stats, "received");
+		mgstats_db_count(pkt.line->linkstats, "received");
 	} else if (n < 1) {
 		pkt.dupe = 1;
 		mgstats_db_count(pkt.line->stats, "duplicates");
+		mgstats_db_count(pkt.line->linkstats, "duplicates");
 	} else { /* n > 1 */
 		mgstats_db_count_num(pkt.line->stats, "lost", n - 1);
+		mgstats_db_count_num(pkt.line->linkstats, "lost", n - 1);
 	}
+
+	mgstats_db_count_num(pkt.line->stats, "rcv_bytes", pkt.size);
+	mgstats_db_count_num(pkt.line->linkstats, "rcv_bytes", pkt.size);
+
+	mgstats_db_ewma(pkt.line->linkstats, "rssi", LINK_EWMA_N, pkt.radio.rssi);
+	mgstats_db_ewma(pkt.line->linkstats, "rate", LINK_EWMA_N, pkt.radio.rate / 2.0);
+	mgstats_db_ewma(pkt.line->linkstats, "antnum", LINK_EWMA_N, pkt.radio.antnum);
 
 	pkt.payload = (uint8_t *) mg_hdr + sizeof *mg_hdr;
 	pkt.paylen  = pkt.size - PKT_HEADERS_SIZE - PKT_IEEE80211_FCSSIZE;
@@ -350,10 +429,10 @@ static void _mgi_sniff(int fd, short event, void *arg)
 
 int mgi_init(struct mg *mg, mgi_packet_cb cb)
 {
-	struct mmatic *mm = mg->mmtmp;
 	struct sockaddr_ll ll;
 	int count = 0;
 	int fd;
+	char name[256];
 
 	memset(&ll, 0, sizeof ll);
 	ll.sll_family = AF_PACKET;
@@ -362,7 +441,9 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 
 	/* open PF_PACKET raw sockets on interfaces */
 	for (int i = 0; i < IFINDEX_MAX; i++) {
-		ll.sll_ifindex = if_nametoindex(mmprintf(IFNAME_FMT, i));
+		snprintf(name, sizeof name, IFNAME_FMT, i);
+
+		ll.sll_ifindex = if_nametoindex(name);
 		if (ll.sll_ifindex == 0)
 			continue;
 
@@ -375,19 +456,86 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 			continue;
 		}
 
-		dbg(1, "bound to " IFNAME_FMT "\n", i);
+		dbg(1, "bound to %s\n", name);
 		count++;
 
 		mg->interface[i].mg = mg;
 		mg->interface[i].num = i;
 		mg->interface[i].fd = fd;
+		mg->interface[i].stats = mgstats_db_create(mg);
+		mg->interface[i].linkstats_root = thash_create_strkey(NULL, mg->mm);
 
 		/* monitor for incoming packets */
 		event_set(&mg->interface[i].evread,
 			fd, EV_READ | EV_PERSIST, _mgi_sniff, &mg->interface[i]);
 
 		event_add(&mg->interface[i].evread, NULL);
+
+		/* interface stats writer */
+		mgstats_writer_add(mg, _stats_write_interface, &mg->interface[i],
+			name, "interface.txt",
+			"sent",
+			"snt_err",
+			"snt_bytes",
+
+			"received",
+			"rcv_bytes",
+			"rcv_cfp",
+			"rcv_shortpre",
+			"rcv_frag",
+			"rcv_badfcs",
+			"rcv_beacons",
+			"rcv_ack",
+			"rcv_nondata",
+			"rcv_retry",
+			"rcv_wrong_bssid",
+			"rcv_wrong_channel",
+			"rcv_wrong_dst",
+			"rcv_aliens",
+
+			NULL);
 	}
 
+	/* global line stats writer */
+	mgstats_writer_add(mg, _stats_aggregate_lines, NULL,
+		NULL, "stats.txt",
+		"received",
+		"duplicates",
+		"lost",
+		"rcv_bytes",
+		NULL);
+
 	return count;
+}
+
+ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid)
+{
+	ut *stats;
+	char key[64], ifname[64], filename[64];
+
+	if (dstid != interface->mg->options.myid)
+		return NULL;
+
+	snprintf(key, sizeof key, "%u-%u", srcid, dstid);
+	stats = thash_get(interface->linkstats_root, key);
+
+	if (!stats) {
+		stats = ut_new_utthash(NULL, interface->mg->mm);
+		thash_set(interface->linkstats_root, key, stats);
+
+		snprintf(ifname, sizeof ifname, IFNAME_FMT, interface->num);
+		snprintf(filename, sizeof filename, "link-%u-%u.txt", srcid, dstid);
+		mgstats_writer_add(interface->mg, _stats_write_link, stats,
+			ifname, filename,
+			"received",
+			"duplicates",
+			"lost",
+			"rcv_bytes",
+			"rssi",
+			"rate",
+			"antnum",
+			NULL);
+	}
+
+	return stats;
 }

@@ -45,4 +45,11 @@ int mgi_inject(struct interface *interface,
  *                     that is PKT_TOTAL_OVERHEAD */
 void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size);
 
+/** Get statistics db for given link on given interface
+ * @param interface    interface
+ * @param srcid        source node
+ * @param dstid        destination node
+ */
+ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid);
+
 #endif
