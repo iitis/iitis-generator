@@ -100,9 +100,11 @@ static void _stats_handler(int fd, short evtype, void *mgarg)
 	mmatic *mmtmp;
 	ut *ut;
 	struct stats_writer *sa;
+	struct timeval tv = {0, 0};
 
 	/* reschedule us */
-	mgs_uschedule(&mg->statss, mg->options.stats * 1000000);
+	tv.tv_sec = mg->options.stats;
+	evtimer_add(&mg->statsev, &tv);
 
 	/* aggregate and write */
 	mmtmp = mmatic_create();
@@ -131,10 +133,12 @@ void mgstats_start(struct mg *mg)
 	const char *name;
 	struct tm tm;
 	char buf[128];
+	struct timeval tv = {0, 0};
 
 	/* schedule first stats write */
-	mgs_setup(&mg->statss, mg, _stats_handler, mg);
-	mgs_uschedule(&mg->statss, mg->options.stats * 1000000);
+	evtimer_set(&mg->statsev, _stats_handler, mg);
+	tv.tv_sec = mg->options.stats;
+	evtimer_add(&mg->statsev, &tv);
 
 	/* main stats dir */
 	if (mg->options.stats_name) {

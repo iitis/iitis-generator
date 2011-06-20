@@ -72,6 +72,7 @@ struct schedule;
 struct schedule {
 	struct event ev;                 /** libevent handle */
 	struct timeval last;             /** absolute time of last schedule request */
+	bool lagging;                    /** true if task is lagging */
 };
 
 /** Traffic file line */
@@ -167,7 +168,7 @@ struct mg {
 	struct timeval last;       /** time of last frame destined to us */
 
 	/* stats */
-	struct schedule statss;    /** stats scheduler info */
+	struct event statsev;      /** stats write event */
 	const char *stats_dir;     /** final stats dir path */
 	thash *stats_files;        /** stats files: file path -> FILE *fh */
 	tlist *stats_writers;      /** tlist of struct stats_writer */

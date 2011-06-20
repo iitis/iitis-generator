@@ -38,10 +38,15 @@ void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 
 	/* calculate time distance */
 	gettimeofday(&now, NULL);
-	if (wanted.tv_sec < now.tv_sec) {
+	if (now.tv_sec > wanted.tv_sec) {
 		dbg(1, "lagging over 1s\n");
+		sch->lagging = true;
+		timerclear(&tv);
+	} else if (now.tv_sec == wanted.tv_sec && now.tv_usec >= wanted.tv_usec) {
+		sch->lagging = true;
 		timerclear(&tv);
 	} else {
+		sch->lagging = false;
 		timersub(&wanted, &now, &tv);
 	}
 
