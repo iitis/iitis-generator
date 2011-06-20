@@ -48,7 +48,7 @@ void mgstats_db_ewma(ut *ut, const char *name, uint32_t n, double val);
 
 /** Aggregate statistics
  * @param src    source stats db, after call counters will be zeroed
- * @param dst    destination stats db
+ * @param dst    already existing, destination stats db
  */
 void mgstats_db_aggregate(ut *dst, ut *src);
 

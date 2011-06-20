@@ -251,6 +251,7 @@ static int parse_traffic(struct mg *mg)
 		/* choose handler for command
 		 * in future?: change to dynamic loader and dlsym() */
 		if (streq(line->cmd, "packet")) {
+			/* TODO assign incoming packet handler too */
 			handle = cmd_packet_out;
 			initialize = cmd_packet_init;
 		} else {
@@ -268,7 +269,6 @@ static int parse_traffic(struct mg *mg)
 		rc = initialize(line);
 		if (rc != 0)
 			return rc;
-
 	}
 
 	fclose(fp);

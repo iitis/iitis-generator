@@ -135,6 +135,9 @@ void mgstats_start(struct mg *mg)
 	char buf[128];
 	struct timeval tv = {0, 0};
 
+	if (mg->options.stats == 0) /* stats disabled */
+		return;
+
 	/* schedule first stats write */
 	evtimer_set(&mg->statsev, _stats_handler, mg);
 	tv.tv_sec = mg->options.stats;
@@ -172,7 +175,7 @@ void mgstats_writer_add(struct mg *mg,
 	sa->dirname = mmatic_strdup(mg->mm, dir ? dir : "");
 	sa->filename = mmatic_strdup(mg->mm, file);
 
-	sa->columns = tlist_create(mmatic_freeptrs, mg->mm);
+	sa->columns = tlist_create(mmatic_freeptr, mg->mm);
 	va_start(va, file);
 	while ((key = va_arg(va, const char *)))
 		tlist_push(sa->columns, mmatic_strdup(mg->mm, key));
