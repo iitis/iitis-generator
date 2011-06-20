@@ -39,6 +39,7 @@ static void help(void)
 	printf("Options:\n");
 	printf("  --id=<num>             my ID number [extract from hostname]\n");
 	printf("  --stats=<num>          generate statistics each <num> seconds [%u]\n", DEFAULT_STATS_PERIOD);
+	printf("  --sync=<num>           run disk sync() each <num> seconds (0=off) [%u]\n", DEFAULT_SYNC_PERIOD);
 	printf("  --root=<dir>           statistics output dir root [%s]\n", DEFAULT_STATS_ROOT);
 	printf("  --name=<name>          dir name under --root [date and time]\n");
 	printf("  --verbose,-V           be verbose (alias for --debug=5)\n");
@@ -76,11 +77,13 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		{ "root",       1, NULL,  6  },
 		{ "name",       1, NULL,  7  },
 		{ "stats",      1, NULL,  8  },
+		{ "sync",       1, NULL,  9  },
 		{ 0, 0, 0, 0 }
 	};
 
 	mg->options.stats      = DEFAULT_STATS_PERIOD;
 	mg->options.stats_root = DEFAULT_STATS_ROOT;
+	mg->options.sync       = DEFAULT_SYNC_PERIOD;
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_opts, long_opts, &i);
@@ -98,6 +101,7 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 			case  6 : mg->options.stats_root = mmatic_strdup(mg->mm, optarg); break;
 			case  7 : mg->options.stats_name = mmatic_strdup(mg->mm, optarg); break;
 			case  8 : mg->options.stats = atoi(optarg); break;
+			case  9 : mg->options.sync = atoi(optarg); break;
 			default: help(); return 1;
 		}
 	}
@@ -276,8 +280,6 @@ static void heartbeat(int fd, short evtype, void *arg)
 	static struct timeval now, diff, tv = {0, 0};
 	struct mg *mg = arg;
 
-	sync();
-
 	/* TODO: garbage collector? */
 
 	/* if no line generator is running and there was no packet to us in last 10 seconds - exit */
@@ -300,6 +302,22 @@ static void heartbeat_init(struct mg *mg)
 {
 	mgs_setup(&mg->hbs, mg, heartbeat, mg);
 	mgs_uschedule(&mg->hbs, HEARTBEAT_PERIOD);
+}
+
+static void sync_run(int fd, short evtype, void *arg)
+{
+	struct mg *mg = arg;
+
+	sync();
+	mgs_uschedule(&mg->syncs, mg->options.sync * 1000000);
+}
+
+static void sync_init(struct mg *mg)
+{
+	if (mg->options.sync > 0) {
+		mgs_setup(&mg->syncs, mg, sync_run, mg);
+		mgs_uschedule(&mg->syncs, mg->options.sync * 1000000);
+	}
 }
 
 int main(int argc, char *argv[])
@@ -338,8 +356,9 @@ int main(int argc, char *argv[])
 	/* synchronize */
 	mgc_sync(mg);
 
-	/* heartbeat signal */
+	/* heartbeat and disk sync signals */
 	heartbeat_init(mg);
+	sync_init(mg);
 
 	/* schedule all lines generators */
 	mgs_schedule_all_lines(mg);

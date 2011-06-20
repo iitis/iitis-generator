@@ -53,6 +53,9 @@
 /** Write statistics each 1 second by default */
 #define DEFAULT_STATS_PERIOD 1
 
+/** Forced disk sync() each 10 seconds by default */
+#define DEFAULT_SYNC_PERIOD 10
+
 /** Heartbeat period */
 #define HEARTBEAT_PERIOD 1000000
 
@@ -138,6 +141,7 @@ struct mg {
 
 	struct event_base *evb;    /** libevent base */
 	struct schedule hbs;       /** heartbeat schedule info */
+	struct schedule syncs;     /** sync() schedule info */
 
 	struct timeval origin;     /** time origin (same on all nodes) */
 
@@ -145,9 +149,10 @@ struct mg {
 	struct {
 		uint8_t myid;           /** my id number */
 		const char *traf_file;  /** traffic file path */
-		uint32_t stats;         /** time between stats write */
+		uint32_t stats;         /** time between stats write [us] */
 		const char *stats_root; /** stats root directory */
 		const char *stats_name; /** stats directory */
+		uint16_t sync;          /** sync time [s] */
 	} options;
 
 	/** interfaces - see interface.c */
