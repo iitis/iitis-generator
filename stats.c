@@ -62,7 +62,7 @@ void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
 
 	/* 1. put time column */
 	gettimeofday(&now, NULL);
-	snprintf(buf, sizeof buf, "%u", (unsigned int) now.tv_sec);
+	snprintf(buf, sizeof buf, "%u", (unsigned int) now.tv_sec - mg->origin.tv_sec);
 	fputs(buf, fh);
 
 	/* 2+ put requested columns */
@@ -133,14 +133,17 @@ void mgstats_start(struct mg *mg)
 	const char *name;
 	struct tm tm;
 	char buf[128];
-	struct timeval tv = {0, 0};
+	struct timeval now, tv;
 
 	if (mg->options.stats == 0) /* stats disabled */
 		return;
 
-	/* schedule first stats write */
+	/* schedule first stats write on origin + stats */
+	gettimeofday(&now, NULL);
+	timersub(&mg->origin, &now, &tv);
+	tv.tv_sec += mg->options.stats;
+
 	evtimer_set(&mg->statsev, _stats_handler, mg);
-	tv.tv_sec = mg->options.stats;
 	evtimer_add(&mg->statsev, &tv);
 
 	/* main stats dir */

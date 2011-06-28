@@ -150,7 +150,7 @@ struct mg {
 	struct {
 		uint8_t myid;           /** my id number */
 		const char *traf_file;  /** traffic file path */
-		uint32_t stats;         /** time between stats write [us] */
+		uint32_t stats;         /** time between stats write [s] */
 		const char *stats_root; /** stats root directory */
 		const char *stats_name; /** stats directory */
 		uint16_t sync;          /** sync time [s] */

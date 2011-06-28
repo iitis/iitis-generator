@@ -360,7 +360,7 @@ int main(int argc, char *argv[])
 	heartbeat_init(mg);
 	sync_init(mg);
 
-	/* schedule all lines generators */
+	/* schedule all line generators */
 	mgs_schedule_all_lines(mg);
 
 	/* start stats */
