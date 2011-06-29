@@ -288,8 +288,8 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	if (pkt.radio.tsft == 0)
 		return;
 
-	mgstats_db_count(interface->stats, "received");
-	mgstats_db_count_num(interface->stats, "rcv_bytes", pkt.size);
+	mgstats_db_count(interface->stats, "rcv_all");
+	mgstats_db_count_num(interface->stats, "rcv_all_bytes", pkt.size);
 
 	if (pkt.radio.flags.badfcs) {
 		dbg(9, "skipping bad FCS frame\n");
@@ -478,8 +478,8 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 			"snt_err",
 			"snt_bytes",
 
-			"received",
-			"rcv_bytes",
+			"rcv_all",
+			"rcv_all_bytes",
 			"rcv_cfp",
 			"rcv_shortpre",
 			"rcv_frag",
