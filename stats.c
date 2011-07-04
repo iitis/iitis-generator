@@ -62,7 +62,7 @@ void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
 
 	/* 1. put time column */
 	gettimeofday(&now, NULL);
-	snprintf(buf, sizeof buf, "%u", (unsigned int) now.tv_sec - mg->origin.tv_sec);
+	snprintf(buf, sizeof buf, "%lu", (unsigned int) now.tv_sec - mg->origin.tv_sec);
 	fputs(buf, fh);
 
 	/* 2+ put requested columns */
@@ -134,6 +134,7 @@ void mgstats_start(struct mg *mg)
 	struct tm tm;
 	char buf[128];
 	struct timeval now, tv;
+	int rc;
 
 	if (mg->options.stats == 0) /* stats disabled */
 		return;
@@ -161,7 +162,16 @@ void mgstats_start(struct mg *mg)
 	if (pjf_mkdir(mg->stats_dir) == 0)
 		dbg(1, "storing statistics in %s\n", mg->stats_dir);
 	else
-		die_errno("pjf_mkdir()");
+		die("pjf_mkdir() failed");
+
+	/* copy traffic file */
+	if (mg->master) {
+		rc = pjf_copyfile(mg->options.traf_file, mmatic_printf(mg->mmtmp,
+			"%s/%s/%s", mg->options.stats_root, name, "traffic.txt"));
+
+		if (rc)
+			die("pjf_copyfile() failed");
+	}
 }
 
 void mgstats_writer_add(struct mg *mg,

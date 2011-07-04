@@ -144,6 +144,7 @@ struct mg {
 	struct schedule hbs;       /** heartbeat schedule info */
 	struct schedule syncs;     /** sync() schedule info */
 
+	bool master;               /** true if this node is sync master */
 	struct timeval origin;     /** time origin (same on all nodes) */
 
 	/** command line options */

@@ -257,12 +257,16 @@ void mgc_sync(struct mg *mg)
 		}
 	}
 
-	if (mg->options.myid == mgs.node_min) /* master */
+	if (mg->options.myid == mgs.node_min) { /* master */
+		mg->master = true;
 		_master(&mgs);
-	else if (mgs.exist[mg->options.myid]) /* slave */
+	} else if (mgs.exist[mg->options.myid]) { /* slave */
+		mg->master = false;
 		_slave(&mgs);
-	else
+	} else {
+		mg->master = false;
 		dbg(0, "Not in traffic file - not syncing\n");
+	}
 
 	event_base_free(mgs.evb);
 	mmatic_freeptr(mgs.exist);
