@@ -223,16 +223,28 @@ void mgstats_db_aggregate(ut *dst, ut *src)
 	thash *srch;
 	char *key;
 	ut *val;
+	uint32_t src_int, dst_int;
+	double src_dbl, dst_dbl;
 
 	srch = ut_thash(src);
 	thash_iter_loop(srch, key, val) {
 		switch (ut_type(val)) {
 			case T_UINT:
-				uth_set_uint(dst, key, ut_uint(val));
+				/* sum */
+				src_int = ut_uint(val);
+				dst_int = uth_uint(dst, key);
+				dst_int += src_int;
+
+				uth_set_uint(dst, key, dst_int);
 				uth_set_uint(src, key, 0);
 				break;
 			case T_DOUBLE:
-				uth_set_double(dst, key, ut_double(val));
+				/* average */
+				src_dbl = ut_double(val);
+				dst_dbl = uth_double(dst, key);
+				dst_dbl = (src_dbl + dst_dbl) / 2.0;
+
+				uth_set_double(dst, key, dst_dbl);
 				break;
 			default:
 				dbg(1, "unknown type for stat '%s'\n", key);

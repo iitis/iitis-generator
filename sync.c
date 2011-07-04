@@ -19,6 +19,7 @@
 #define SLAVE_TIMEOUT 3
 #define MASTER_OFFER 5
 #define MASTER_TIMEOUT 1
+#define SLAVE_MARGIN (MASTER_OFFER + SLAVE_TIMEOUT)
 
 static void _make_offer(struct mg_sync *mgs)
 {
@@ -130,12 +131,13 @@ static void _slave_tmout(int fd, short evtype, void *arg)
 	event_base_loopbreak(mgs->evb);
 }
 
-static void _slave_read(int s, short evtype, void *arg)
+static void _slave_read_offer(int s, short evtype, void *arg)
 {
 	struct sockaddr_in src;
 	socklen_t slen = sizeof src;
 	struct mg_sync *mgs = arg;
 	struct timeval tv = { SLAVE_TIMEOUT, 0 };
+	struct timeval now;
 
 	if (recvfrom(s, &mgs->hdr, sizeof mgs->hdr, 0, (struct sockaddr *) &src, &slen) < 0)
 		die_errno("recvfrom");
@@ -149,6 +151,16 @@ static void _slave_read(int s, short evtype, void *arg)
 	/* store origin offer */
 	mgs->mg->origin.tv_sec  = ntohl(mgs->hdr.time_s);
 	mgs->mg->origin.tv_usec = ntohl(mgs->hdr.time_us);
+
+	/* check the offer - work around unsychronized system clocks on whole system startup */
+	gettimeofday(&now, NULL);
+	if (mgs->mg->origin.tv_sec <= now.tv_sec) {
+		dbg(1, "offer in the past - ignoring\n");
+		return;
+	} else if (mgs->mg->origin.tv_sec - now.tv_sec > SLAVE_MARGIN) {
+		dbg(1, "offer too far in the future - ignoring\n");
+		return;
+	}
 
 	/* setup timeout: 3 seconds from now to use origin */
 	timeout_del(&mgs->evt);
@@ -180,7 +192,7 @@ static void _slave(struct mg_sync *mgs)
 
 	mgs->s = s;
 
-	event_set(&mgs->evr, s, EV_READ | EV_PERSIST, _slave_read, mgs);
+	event_set(&mgs->evr, s, EV_READ | EV_PERSIST, _slave_read_offer, mgs);
 	event_base_set(mgs->evb, &mgs->evr);
 	event_add(&mgs->evr, 0);
 

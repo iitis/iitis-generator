@@ -131,8 +131,8 @@ int mgi_inject(struct interface *interface,
 		mgstats_db_count(interface->stats, "snt_err");
 		reterrno(-1, 0, "sendmsg");
 	} else {
-		mgstats_db_count(interface->stats, "sent");
-		mgstats_db_count_num(interface->stats, "snt_bytes",
+		mgstats_db_count(interface->stats, "snt_ok");
+		mgstats_db_count_num(interface->stats, "snt_ok_bytes",
 			iov[1].iov_len + iov[2].iov_len + iov[3].iov_len);
 		return ret;
 	}
@@ -394,25 +394,32 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		return;
 	}
 
+	mgstats_db_count(interface->stats, "rcv_ok");
+	mgstats_db_count_num(interface->stats, "rcv_ok_bytes", pkt.size);
+
 	/* store time of last frame destined to us */
 	gettimeofday(&interface->mg->last, NULL);
 
 	/* handle duplicates - dont drop - may be needed for stats */
 	n = pkt.mg_hdr.line_ctr - pkt.line->line_ctr_rcv;
 	if (n == 1) {
-		mgstats_db_count(pkt.line->stats, "received");
-		mgstats_db_count(pkt.line->linkstats, "received");
+		mgstats_db_count(pkt.line->linkstats, "rcv_ok");
+		mgstats_db_count_num(pkt.line->linkstats, "rcv_ok_bytes", pkt.size);
+
+		mgstats_db_count(pkt.line->stats, "rcv_ok");
+		mgstats_db_count_num(pkt.line->stats, "rcv_ok_bytes", pkt.size);
 	} else if (n < 1) {
 		pkt.dupe = 1;
-		mgstats_db_count(pkt.line->stats, "duplicates");
-		mgstats_db_count(pkt.line->linkstats, "duplicates");
-	} else { /* n > 1 */
-		mgstats_db_count_num(pkt.line->stats, "lost", n - 1);
-		mgstats_db_count_num(pkt.line->linkstats, "lost", n - 1);
-	}
 
-	mgstats_db_count_num(pkt.line->stats, "rcv_bytes", pkt.size);
-	mgstats_db_count_num(pkt.line->linkstats, "rcv_bytes", pkt.size);
+		mgstats_db_count(pkt.line->linkstats, "rcv_dup");
+		mgstats_db_count_num(pkt.line->linkstats, "rcv_dup_bytes", pkt.size);
+
+		mgstats_db_count(pkt.line->stats, "rcv_dup");
+		mgstats_db_count_num(pkt.line->stats, "rcv_dup_bytes", pkt.size);
+	} else { /* n > 1 */
+		mgstats_db_count_num(pkt.line->linkstats, "rcv_lost", n - 1);
+		mgstats_db_count_num(pkt.line->stats, "rcv_lost", n - 1);
+	}
 
 	mgstats_db_ewma(pkt.line->linkstats, "rssi", LINK_EWMA_N, pkt.radio.rssi);
 	mgstats_db_ewma(pkt.line->linkstats, "rate", LINK_EWMA_N, pkt.radio.rate / 2.0);
@@ -474,9 +481,9 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 		/* interface stats writer */
 		mgstats_writer_add(mg, _stats_write_interface, &mg->interface[i],
 			name, "interface.txt",
-			"sent",
+			"snt_ok",
+			"snt_ok_bytes",
 			"snt_err",
-			"snt_bytes",
 
 			"rcv_all",
 			"rcv_all_bytes",
@@ -492,17 +499,20 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 			"rcv_wrong_channel",
 			"rcv_wrong_dst",
 			"rcv_aliens",
+			"rcv_ok",
+			"rcv_ok_bytes",
 
 			NULL);
 	}
 
 	/* global line stats writer */
 	mgstats_writer_add(mg, _stats_aggregate_lines, NULL,
-		NULL, "stats.txt",
-		"received",
-		"duplicates",
-		"lost",
-		"rcv_bytes",
+		NULL, "linestats.txt",
+		"rcv_ok",
+		"rcv_ok_bytes",
+		"rcv_dup",
+		"rcv_dup_bytes",
+		"rcv_lost",
 		NULL);
 
 	return count;
@@ -527,10 +537,11 @@ ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid)
 		snprintf(filename, sizeof filename, "link-%u-%u.txt", srcid, dstid);
 		mgstats_writer_add(interface->mg, _stats_write_link, stats,
 			ifname, filename,
-			"received",
-			"duplicates",
-			"lost",
-			"rcv_bytes",
+			"rcv_ok",
+			"rcv_ok_bytes",
+			"rcv_dup",
+			"rcv_dup_bytes",
+			"rcv_lost",
 			"rssi",
 			"rate",
 			"antnum",
