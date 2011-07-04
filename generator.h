@@ -146,6 +146,10 @@ struct mg {
 	struct schedule syncs;     /** sync() schedule info */
 
 	bool master;               /** true if this node is sync master */
+	bool sender;               /** true if node has packets to send */
+	bool receiver;             /** true if node should receive packets */
+
+	bool synced;               /** true if origin is valid */
 	struct timeval origin;     /** time origin (same on all nodes) */
 
 	/** command line options */
@@ -245,7 +249,9 @@ struct mg_sync {
 	uint8_t node_max;             /** highest node id */
 	uint32_t node_count;          /** number of nodes */
 	uint8_t *exist;               /** 0 = nonexistent, 1 = exists */
-	uint8_t *acked;               /** 1 = acked to time offer */
+	uint8_t *senders;             /** 1 = sends packets */
+	uint8_t *receivers;           /** 1 = receives packets */
+	uint8_t *acked;               /** 1 = node acked to time offer (used at master) */
 };
 
 

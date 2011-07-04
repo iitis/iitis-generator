@@ -63,6 +63,7 @@ void _master_read(int s, short evtype, void *arg)
 	/* let it go if all replied */
 	if (memcmp(mgs->exist, mgs->acked, mgs->node_max + 1) == 0) {
 		dbg(1, "received all ACKs\n");
+		mgs->mg->synced = true;
 		event_base_loopbreak(mgs->evb);
 	}
 }
@@ -128,6 +129,7 @@ static void _master(struct mg_sync *mgs)
 static void _slave_tmout(int fd, short evtype, void *arg)
 {
 	struct mg_sync *mgs = arg;
+	mgs->mg->synced = true;
 	event_base_loopbreak(mgs->evb);
 }
 
@@ -240,19 +242,23 @@ void mgc_sync(struct mg *mg)
 
 	mgs.evb = event_base_new();
 	mgs.exist = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
+	mgs.senders = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
+	mgs.receivers = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
 	mgs.acked = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
 
 	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
 		if (!mg->lines[i])
 			continue;
 
-		if (!mgs.exist[mg->lines[i]->srcid]) {
+		if (!mgs.senders[mg->lines[i]->srcid]) {
 			mgs.exist[mg->lines[i]->srcid] = 1;
+			mgs.senders[mg->lines[i]->srcid] = 1;
 			mgs.node_count++;
 		}
 
-		if (!mgs.exist[mg->lines[i]->dstid]) {
+		if (!mgs.receivers[mg->lines[i]->dstid]) {
 			mgs.exist[mg->lines[i]->dstid] = 1;
+			mgs.receivers[mg->lines[i]->dstid] = 1;
 			mgs.node_count++;
 		}
 	}
@@ -261,14 +267,19 @@ void mgc_sync(struct mg *mg)
 		mg->master = true;
 		_master(&mgs);
 	} else if (mgs.exist[mg->options.myid]) { /* slave */
-		mg->master = false;
 		_slave(&mgs);
 	} else {
-		mg->master = false;
 		dbg(0, "Not in traffic file - not syncing\n");
 	}
 
+	if (mgs.senders[mg->options.myid])
+		mg->sender = true;
+	if (mgs.receivers[mg->options.myid])
+		mg->receiver = true;
+
 	event_base_free(mgs.evb);
 	mmatic_freeptr(mgs.exist);
+	mmatic_freeptr(mgs.senders);
+	mmatic_freeptr(mgs.receivers);
 	mmatic_freeptr(mgs.acked);
 }

@@ -23,7 +23,6 @@ static void _stats_writer_free(void *arg)
 void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
 {
 	const char *key;
-	FILE *fh;
 	struct timeval now;
 	char buf[256];
 	ut *val;
@@ -125,6 +124,11 @@ void mgstats_start(struct mg *mg)
 
 	if (mg->options.stats == 0) /* stats disabled */
 		return;
+
+	if (!mg->synced) {
+		dbg(1, "not synced - disabling stats\n");
+		return;
+	}
 
 	/* schedule first stats write on origin + stats */
 	gettimeofday(&now, NULL);
