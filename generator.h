@@ -129,6 +129,7 @@ struct stats_writer {
 	tlist *columns;                      /** column names to export */
 	const char *dirname;                 /** optional directory under main stats dir */
 	const char *filename;                /** stats file name */
+	FILE *fh;                            /** open file handle */
 };
 
 /** Incoming frame callback type
@@ -171,7 +172,6 @@ struct mg {
 	/* stats */
 	struct event statsev;      /** stats write event */
 	const char *stats_dir;     /** final stats dir path */
-	thash *stats_files;        /** stats files: file path -> FILE *fh */
 	tlist *stats_writers;      /** tlist of struct stats_writer */
 };
 

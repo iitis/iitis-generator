@@ -10,11 +10,6 @@
 #include "stats.h"
 #include "schedule.h"
 
-static void _stats_files_free(void *arg)
-{
-	fclose((FILE *) arg);
-}
-
 static void _stats_writer_free(void *arg)
 {
 	struct stats_writer *sa = arg;
@@ -30,40 +25,35 @@ void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
 	const char *key;
 	FILE *fh;
 	struct timeval now;
-	char buf[256], fhkey[256];
+	char buf[256];
 	ut *val;
 
-	/* fetch from cache */
-	snprintf(fhkey, sizeof fhkey, "./%s/%s", sa->dirname, sa->filename);
-	fh = thash_get(mg->stats_files, fhkey);
-
-	/* if no entry, create */
-	if (!fh) {
+	/* open file if needed */
+	if (!sa->fh) {
 		/* create dir */
 		snprintf(buf, sizeof buf, "%s/%s", mg->stats_dir, sa->dirname);
-		if (pjf_mkdir(buf) != 0) die_errno(buf);
+		if (pjf_mkdir(buf) != 0)
+			die("pjf_mkdir(%s) failed\n", buf);
 
 		/* create file */
 		snprintf(buf, sizeof buf, "%s/%s/%s", mg->stats_dir, sa->dirname, sa->filename);
-		fh = fopen(buf, "w");
-		if (!fh) die_errno(buf);
+		sa->fh = fopen(buf, "w");
+		if (!sa->fh)
+			die("fopen(%s) failed\n", buf);
 
 		/* write column names in first line */
-		fputs("#time", fh);
+		fputs("#time", sa->fh);
 		tlist_iter_loop(sa->columns, key) {
-			fputc(' ', fh);
-			fputs(key, fh);
+			fputc(' ', sa->fh);
+			fputs(key, sa->fh);
 		}
-		fputs("\n", fh);
-
-		/* store file handle for further writes */
-		thash_set(mg->stats_files, fhkey, fh);
+		fputs("\n", sa->fh);
 	}
 
 	/* 1. put time column */
 	gettimeofday(&now, NULL);
 	snprintf(buf, sizeof buf, "%lu", (unsigned int) now.tv_sec - mg->origin.tv_sec);
-	fputs(buf, fh);
+	fputs(buf, sa->fh);
 
 	/* 2+ put requested columns */
 	tlist_iter_loop(sa->columns, key) {
@@ -86,11 +76,11 @@ void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
 			}
 		}
 
-		fputs(buf, fh);
+		fputs(buf, sa->fh);
 	}
 
-	fputs("\n", fh);
-	fflush(fh);
+	fputs("\n", sa->fh);
+	fflush(sa->fh);
 }
 
 /** Iterate through mg->stats_writers calling handlers and writing results to files */
@@ -123,9 +113,6 @@ void mgstats_init(struct mg *mg)
 {
 	/* writers */
 	mg->stats_writers = tlist_create(_stats_writer_free, mg->mm);
-
-	/* target files */
-	mg->stats_files = thash_create_strkey(_stats_files_free, mg->mm);
 }
 
 void mgstats_start(struct mg *mg)
@@ -162,7 +149,7 @@ void mgstats_start(struct mg *mg)
 	if (pjf_mkdir(mg->stats_dir) == 0)
 		dbg(1, "storing statistics in %s\n", mg->stats_dir);
 	else
-		die("pjf_mkdir() failed");
+		die("pjf_mkdir(%s) failed\n", mg->stats_dir);
 
 	/* copy traffic file */
 	if (mg->master) {
@@ -170,7 +157,7 @@ void mgstats_start(struct mg *mg)
 			"%s/%s/%s", mg->options.stats_root, name, "traffic.txt"));
 
 		if (rc)
-			die("pjf_copyfile() failed");
+			die("pjf_copyfile() failed\n");
 	}
 }
 
