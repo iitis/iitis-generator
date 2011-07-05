@@ -10,6 +10,7 @@ void mgs_schedule_all_lines(struct mg *mg)
 {
 	int i;
 
+	/* run all lines belonging to this node */
 	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
 		if (!mg->lines[i])
 			continue;
@@ -17,10 +18,8 @@ void mgs_schedule_all_lines(struct mg *mg)
 		if (mg->lines[i]->srcid != mg->options.myid)
 			continue;
 
-		mg->lines[i]->schedule.last.tv_sec  = mg->origin.tv_sec;
-		mg->lines[i]->schedule.last.tv_usec = mg->origin.tv_usec;
+		/* this will schedule first execution */
 		mgs_sleep(mg->lines[i], NULL);
-
 		mg->running++;
 	}
 }
@@ -28,6 +27,12 @@ void mgs_schedule_all_lines(struct mg *mg)
 void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 {
 	struct timeval now, wanted, tv;
+
+	/* first "last run" is at the origin */
+	if (sch->last.tv_sec == 0) {
+		sch->last.tv_sec = sch->mg->origin.tv_sec;
+		sch->last.tv_usec = sch->mg->origin.tv_usec;
+	}
 
 	/* compute and update accurate absolute location of requested moment */
 	timeradd(&sch->last, timeout, &wanted);
@@ -51,7 +56,11 @@ void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 	}
 
 	/* schedule */
-	evtimer_add(&sch->ev, &tv);
+	//if (sch->cb && sch->lagging) {
+	//	sch->cb(-1, EV_TIMEOUT, sch->arg);
+	//} else {
+		evtimer_add(&sch->ev, &tv);
+	//}
 }
 
 void mgs_uschedule(struct schedule *sch, uint32_t time_us)
@@ -75,7 +84,8 @@ void mgs_usleep(struct line *line, uint32_t time_us)
 
 void mgs_setup(struct schedule *sch, struct mg *mg, void (*cb)(int, short, void *), void *arg)
 {
-	sch->last.tv_sec  = mg->origin.tv_sec;
-	sch->last.tv_usec = mg->origin.tv_usec;
+	sch->mg = mg;
+	sch->cb = cb;
+	sch->arg = arg;
 	evtimer_set(&sch->ev, cb, arg);
 }

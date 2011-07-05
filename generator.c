@@ -267,7 +267,7 @@ static int parse_traffic(struct mg *mg)
 		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
 
 		/* prepare (may contain further line parsing) */
-		evtimer_set(&line->schedule.ev, handle, line);
+		mgs_setup(&line->schedule, mg, handle, line);
 		rc = initialize(line);
 		if (rc != 0)
 			return rc;

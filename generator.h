@@ -70,9 +70,14 @@ struct schedule;
 
 /** Scheduler info */
 struct schedule {
+	struct mg *mg;                   /** root */
+
 	struct event ev;                 /** libevent handle */
-	struct timeval last;             /** absolute time of last schedule request */
+	struct timeval last;             /** absolute time of last run */
 	bool lagging;                    /** true if task is lagging */
+
+	void (*cb)(int, short, void *);  /** timer callback */
+	void *arg;                       /** timer callback argument */
 };
 
 /** Traffic file line */
