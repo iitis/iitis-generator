@@ -151,7 +151,7 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 	struct mg_hdr *mg_hdr;
 	struct timeval timestamp;
 	struct interface *interface = line->interface;
-	int i, j;
+	int i, j, k;
 	struct timeval t1, t2, diff;
 
 	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
@@ -190,17 +190,16 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 	i = sizeof *mg_hdr;
 
 	if (payload) {
-		for (j = 0; i < size && j < payload_size; i++)
-			pkt[i] = payload[j++];
+		k = MIN(payload_size, size - i);
+		memcpy(pkt+i, payload, k);
+		i += k;
 	}
 
-	for (j = 0; i < size; i++) {
-		pkt[i] = line->contents[j];
-
-		if (line->contents[j] == '\0')
-			j = 0;
-		else
-			j++;
+	j = strlen(line->contents);
+	while (i < size) {
+		k = MIN(j, size - i);
+		memcpy(pkt+i, line->contents, k);
+		i += k;
 	}
 
 	/* send */
