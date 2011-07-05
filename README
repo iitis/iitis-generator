@@ -1,4 +1,0 @@
-Notes
-
-1. Take care not to set the frequency such that `iw info' command shows "(radar detection)" next to
-it. There are WiFi channels for which frame injection is banned by the law.

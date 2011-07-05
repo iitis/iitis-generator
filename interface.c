@@ -56,6 +56,7 @@ int mgi_inject(struct interface *interface,
 	uint16_t ether_type, void *data, size_t len)
 {
 	int ret;
+	struct timeval t1, t2, diff;
 
 	dbg(15, "interface=%d len=%d\n", interface->num, len);
 
@@ -126,9 +127,15 @@ int mgi_inject(struct interface *interface,
 	memcpy(ieee80211_hdr + 10,   src, sizeof *src);
 	memcpy(ieee80211_hdr + 16, bssid, sizeof *bssid);
 
+	gettimeofday(&t1, NULL);
 	ret = sendmsg(interface->fd, &msg, 0);
+	gettimeofday(&t2, NULL);
+
+	timersub(&t2, &t1, &diff);
+	mgstats_db_count_num(interface->stats, "snt_time",
+		diff.tv_sec * 1000000 + diff.tv_usec);
+
 	if (ret < 0) {
-		mgstats_db_count(interface->stats, "snt_err");
 		reterrno(-1, 0, "sendmsg");
 	} else {
 		mgstats_db_count(interface->stats, "snt_ok");
@@ -145,6 +152,7 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 	struct timeval timestamp;
 	struct interface *interface = line->interface;
 	int i, j;
+	struct timeval t1, t2, diff;
 
 	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
 	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->mg->options.myid }};
@@ -152,6 +160,8 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 
 	dbg(5, "sending line %d: %d -> %d size %d\n",
 		line->line_num, line->mg->options.myid, line->dstid, size);
+
+	gettimeofday(&t1, NULL);
 
 	size -= PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE;
 	if (size < sizeof *mg_hdr) {
@@ -196,6 +206,13 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 	/* send */
 	mgi_inject(interface, &bssid, &dstmac, &srcmac, line->rate,
 		PKT_ETHERTYPE, (void *) pkt, (size_t) size);
+
+	gettimeofday(&t2, NULL);
+	timersub(&t2, &t1, &diff);
+	mgstats_db_count_num(line->stats, "snt_time",
+		diff.tv_sec * 1000000 + diff.tv_usec);
+
+	mgstats_db_count(line->stats, "snt_ok");
 }
 
 static void _mgi_sniff(int fd, short event, void *arg)
@@ -483,7 +500,7 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 			name, "interface.txt",
 			"snt_ok",
 			"snt_ok_bytes",
-			"snt_err",
+			"snt_time",
 
 			"rcv_all",
 			"rcv_all_bytes",
@@ -508,6 +525,8 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 	/* global line stats writer */
 	mgstats_writer_add(mg, _stats_aggregate_lines, NULL,
 		NULL, "linestats.txt",
+		"snt_ok",
+		"snt_time",
 		"rcv_ok",
 		"rcv_ok_bytes",
 		"rcv_dup",

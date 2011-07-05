@@ -150,6 +150,7 @@ static int parse_traffic(struct mg *mg)
 	uint32_t line_num = 0;
 	int i, j, token, rc;
 	struct line *line;
+	double halfrate;
 
 	void (*handle)(int, short, void *);
 	int (*initialize)(struct line *line);
@@ -215,7 +216,8 @@ static int parse_traffic(struct mg *mg)
 						line->dstid = atoi(buf+i);
 						break;
 					case 5:
-						line->rate = atoi(buf+i) * 2; /* NB: "auto" => 0 */
+						halfrate = strtod(buf+i, NULL);
+						line->rate = halfrate * 2; /* NB: "auto" => 0 */
 						break;
 					case 6:
 						line->noack = atoi(buf+i);
