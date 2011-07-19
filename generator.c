@@ -32,7 +32,7 @@ static void libevent_log(int severity, const char *msg)
 /** Prints usage help screen */
 static void help(void)
 {
-	printf("Usage: generator [OPTIONS] <TRAFFIC FILE>\n");
+	printf("Usage: generator [OPTIONS] <TRAFFIC FILE> [<CONFIG FILE>]\n");
 	printf("\n");
 	printf("  A mac80211 packet generator.\n");
 	printf("\n");
@@ -46,6 +46,8 @@ static void help(void)
 	printf("  --debug=<num>          set debugging level\n");
 	printf("  --help,-h              show this usage help screen\n");
 	printf("  --version,-v           show version and copying information\n");
+	printf("\n");
+	printf("  Configuration file, if supplied, is applied after command line options.\n");
 }
 
 /** Prints version and copying information. */
@@ -64,7 +66,6 @@ static void version(void)
 static int parse_argv(struct mg *mg, int argc, char *argv[])
 {
 	int i, c;
-	char hostname[128];
 
 	static char *short_opts = "hvdV";
 	static struct option long_opts[] = {
@@ -106,36 +107,154 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		}
 	}
 
+	/* get traffic file path */
 	if (argc - optind > 0) {
-		mg->options.traf_file = argv[optind];
+		mg->options.traf_file = argv[optind++];
 	} else {
 		help();
 		return 1;
 	}
 
-	if (mg->options.myid == 0) {
-		gethostname(hostname, sizeof hostname);
-		for (i = 0; hostname[i]; i++)
-			if (isdigit(hostname[i]))
-				break;
+	/* get configuration file path */
+	if (argc - optind > 0)
+		mg->options.conf_file = argv[optind++];
 
-		mg->options.myid = atoi(hostname + i);
-		dbg(1, "my id: %d\n", mg->options.myid);
+	return 0;
+}
+
+/** Setup options.myid basing on this host name */
+static void fetch_myid(struct mg *mg)
+{
+	int i;
+	char hostname[128];
+
+	gethostname(hostname, sizeof hostname);
+	for (i = 0; hostname[i]; i++) {
+		if (isdigit(hostname[i]))
+			break;
+	}
+
+	mg->options.myid = atoi(hostname + i);
+	dbg(1, "my id: %d\n", mg->options.myid);
+}
+
+/** Parse config file part passed as unitype object
+ * @retval 0 success
+ * @retval 1 error
+ */
+static int parse_config_ut(struct mg *mg, ut *cfg)
+{
+	thash *t;
+	char *key, *key2;
+	ut *subcfg;
+	int num1, num2;
+
+	t = ut_thash(cfg);
+
+	/* parse global config */
+	thash_iter_loop(t, key, subcfg) {
+		if (isdigit(key[0]))
+			continue;
+
+		if (streq(key, "id")) {
+			mg->options.myid = ut_int(subcfg);
+		} else if (streq(key, "stats")) {
+			mg->options.stats = ut_int(subcfg);
+		} else if (streq(key, "sync")) {
+			mg->options.sync = ut_int(subcfg);
+		} else if (streq(key, "root")) {
+			mg->options.stats_root = ut_char(subcfg);
+		} else if (streq(key, "name")) {
+			mg->options.stats_name = ut_char(subcfg);
+		} else if (streq(key, "session")) {
+			mg->options.stats_sess = ut_char(subcfg);
+		} else if (streq(key, "dump")) {
+			mg->options.dump = ut_bool(subcfg);
+		} else {
+			dbg(0, "unrecognized configuration file option: %s\n", key);
+			return 1;
+		}
+	}
+
+	/* parse per-node config */
+	thash_iter_loop(t, key, subcfg) {
+		if (!(isdigit(key[0]) && ut_type(subcfg) == T_HASH))
+			continue;
+
+		/* parse list consisting of ranges and lists of ids */
+		while (isdigit(key[0])) {
+			num1 = strtol(key, &key2, 10);
+
+			if (key2[0] == '-') {
+				/* range */
+				num2 = strtol(key2+1, &key, 10);
+				key++;
+			} else if (key2[0] == ',') {
+				/* list */
+				num2 = 0;
+				key = key2 + 1;
+			} else {
+				/* single */
+				num2 = 0;
+				key = key2;
+			}
+
+			/* if its for me... */
+			if (mg->options.myid == num1 ||
+			    (num2 > 0 && (mg->options.myid >= num1 && mg->options.myid <= num2))) {
+				printf("parsing - its for me\n");
+				parse_config_ut(mg, subcfg);
+			}
+		}
 	}
 
 	return 0;
 }
 
-/** Pass incoming packet to proper handler */
-static void handle_packet(struct sniff_pkt *pkt)
+/** Parse config file
+ * @retval 0 success
+ * @retval 1 syntax error
+ * @retval 2 logic error
+ * @retval 3 other error
+ */
+static int parse_config(struct mg *mg)
 {
-	/* TODO: stats (remember to drop duplicates) */
+	FILE *fp;
+	xstr *xs;
+	char buf[4096], *str;
+	json *js;
+	ut *cfg;
 
-	if (streq(pkt->line->cmd, "packet")) {
-		cmd_packet_in(pkt);
+	/* read file contents, ignoring empty lines and comments */
+	fp = fopen(mg->options.conf_file, "r");
+	if (!fp) {
+		dbg(0, "%s: fopen() failed: %s\n", mg->options.conf_file, strerror(errno));
+		return 3;
 	}
 
-	return;
+	xs = xstr_create("{", mg->mmtmp);
+	while (fgets(buf, sizeof buf, fp)) {
+		str = pjf_trim(buf);
+		if (!str || !str[0] || str[0] == '#')
+			continue;
+
+		xstr_append(xs, str);
+	}
+	xstr_append_char(xs, '}');
+	fclose(fp);
+
+	/* parse config file as loose JSON */
+	js = json_create(mg->mmtmp);
+	json_setopt(js, JSON_LOOSE, 1);
+
+	cfg = json_parse(js, xstr_string(xs));
+	if (!ut_ok(cfg)) {
+		dbg(0, "parsing config file failed: %s\n", ut_err(cfg));
+		return 1;
+	}
+
+	/* parse config */
+	return (parse_config_ut(mg, cfg) ? 2 : 0);
 }
 
 /** Parse traffic file
@@ -322,6 +441,18 @@ static void sync_init(struct mg *mg)
 	}
 }
 
+/** Pass incoming packet to proper handler */
+static void handle_packet(struct sniff_pkt *pkt)
+{
+	/* TODO: stats (remember to drop duplicates) */
+
+	if (streq(pkt->line->cmd, "packet")) {
+		cmd_packet_in(pkt);
+	}
+
+	return;
+}
+
 int main(int argc, char *argv[])
 {
 	mmatic *mm = mmatic_create();
@@ -335,19 +466,29 @@ int main(int argc, char *argv[])
 	mg->mm = mm;
 	mg->mmtmp = mmtmp;
 
+	/* get my id number from hostname */
+	fetch_myid(mg);
+
+	/* parse command line options */
 	if (parse_argv(mg, argc, argv))
 		return 1;
 
-	/* libevent */
+	/* parse configuration file options */
+	if (mg->options.conf_file) {
+		if (parse_config(mg))
+			return 4;
+	}
+
+	/* init libevent */
 	mg->evb = event_init();
 	event_set_log_callback(libevent_log);
 
-	/* init stats so mgstats_aggregator_add() works */
+	/* init stats so mgstats_aggregator_add() used somewhere below works */
 	mgstats_init(mg);
 
 	/* raw interfaces */
 	if (mgi_init(mg, handle_packet) <= 0) {
-		dbg(0, "no available interfaces found");
+		dbg(0, "no available interfaces found\n");
 		return 2;
 	}
 
