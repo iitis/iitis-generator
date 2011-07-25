@@ -164,8 +164,7 @@ struct mg {
 		const char *conf_file;  /** config file path */
 		uint32_t stats;         /** time between stats write [s] */
 		const char *stats_root; /** stats root directory */
-		const char *stats_name; /** stats directory name */
-		const char *stats_sess; /** session name - stats directory name prefix */
+		const char *stats_sess; /** stats session name */
 		uint16_t sync;          /** sync time [s] */
 		bool dump;              /** dump raw frames to disk */
 	} options;

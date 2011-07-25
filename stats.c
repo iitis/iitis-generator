@@ -20,7 +20,8 @@ static void _stats_writer_free(void *arg)
 	mmatic_freeptr(sa);
 }
 
-void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
+/** Append statistics line to file */
+static void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
 {
 	const char *key;
 	struct timeval now;
@@ -116,11 +117,10 @@ void mgstats_init(struct mg *mg)
 
 void mgstats_start(struct mg *mg)
 {
-	const char *name;
 	struct tm tm;
-	char buf[128];
+	char buf1[128], buf2[128];
 	struct timeval now, tv;
-	int rc;
+	char *stats_session_root;
 
 	if (mg->options.stats == 0) /* stats disabled */
 		return;
@@ -138,30 +138,42 @@ void mgstats_start(struct mg *mg)
 	evtimer_set(&mg->statsev, _stats_handler, mg);
 	evtimer_add(&mg->statsev, &tv);
 
-	/* main stats dir */
-	if (mg->options.stats_name) {
-		name = mg->options.stats_name;
-	} else {
-		localtime_r(&mg->origin.tv_sec, &tm);
-		strftime(buf, sizeof buf, "%Y-%m-%d_%H:%M:%S", &tm);
-		name = buf;
-	}
+	/* make two-level directory level based on time */
+	localtime_r(&mg->origin.tv_sec, &tm);
+	strftime(buf1, sizeof buf1, "%Y.%m", &tm);
+	strftime(buf2, sizeof buf2, "%Y.%m.%d-%H:%M:%S", &tm);
 
-	mg->stats_dir = mmatic_printf(mg->mm, "%s/%s/%u",
-		mg->options.stats_root, name, mg->options.myid);
+	/* make stats session root dir and ensure its unique */
+	if (mg->options.stats_sess)
+		stats_session_root = mmatic_printf(mg->mmtmp, "%s/%s/%s-%s",
+			mg->options.stats_root, buf1, mg->options.stats_sess, buf2);
+	else
+		stats_session_root = mmatic_printf(mg->mmtmp, "%s/%s/%s",
+			mg->options.stats_root, buf1, buf2);
 
+	/* my stats dir */
+	mg->stats_dir = mmatic_printf(mg->mm, "%s/%u",
+			stats_session_root, mg->options.myid);
+
+	/* create it or die */
 	if (pjf_mkdir(mg->stats_dir) == 0)
 		dbg(1, "storing statistics in %s\n", mg->stats_dir);
 	else
 		die("pjf_mkdir(%s) failed\n", mg->stats_dir);
 
-	/* copy traffic file */
+	/* master does special work */
 	if (mg->master) {
-		rc = pjf_copyfile(mg->options.traf_file, mmatic_printf(mg->mmtmp,
-			"%s/%s/%s", mg->options.stats_root, name, "traffic.txt"));
+		/* copy traffic file */
+		if (pjf_copyfile(mg->options.traf_file,
+			mmatic_printf(mg->mmtmp, "%s/traffic.txt", stats_session_root)))
+			die("pjf_copyfile() of traffic file failed\n");
 
-		if (rc)
-			die("pjf_copyfile() failed\n");
+		/* copy config file if exists */
+		if (mg->options.conf_file) {
+			if (pjf_copyfile(mg->options.conf_file,
+				mmatic_printf(mg->mmtmp, "%s/generator.conf", stats_session_root)))
+				die("pjf_copyfile() of config file failed\n");
+		}
 	}
 }
 

@@ -40,8 +40,8 @@ static void help(void)
 	printf("  --id=<num>             my ID number [extract from hostname]\n");
 	printf("  --stats=<num>          generate statistics each <num> seconds [%u]\n", DEFAULT_STATS_PERIOD);
 	printf("  --sync=<num>           run disk sync() each <num> seconds (0=off) [%u]\n", DEFAULT_SYNC_PERIOD);
-	printf("  --root=<dir>           statistics output dir root [%s]\n", DEFAULT_STATS_ROOT);
-	printf("  --name=<name>          dir name under --root [date and time]\n");
+	printf("  --root=<dir>           stats output dir root [%s]\n", DEFAULT_STATS_ROOT);
+	printf("  --sess=<name>          stats session name - prefix of stats dir name\n");
 	printf("  --verbose,-V           be verbose (alias for --debug=5)\n");
 	printf("  --debug=<num>          set debugging level\n");
 	printf("  --help,-h              show this usage help screen\n");
@@ -76,9 +76,9 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		{ "version",    0, NULL,  4  },
 		{ "id",         1, NULL,  5  },
 		{ "root",       1, NULL,  6  },
-		{ "name",       1, NULL,  7  },
 		{ "stats",      1, NULL,  8  },
 		{ "sync",       1, NULL,  9  },
+		{ "sess",       1, NULL, 10  },
 		{ 0, 0, 0, 0 }
 	};
 
@@ -100,9 +100,9 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 			case  4 : version(); return 2;
 			case  5 : mg->options.myid = atoi(optarg); break;
 			case  6 : mg->options.stats_root = mmatic_strdup(mg->mm, optarg); break;
-			case  7 : mg->options.stats_name = mmatic_strdup(mg->mm, optarg); break;
 			case  8 : mg->options.stats = atoi(optarg); break;
 			case  9 : mg->options.sync = atoi(optarg); break;
+			case 10 : mg->options.stats_sess = mmatic_strdup(mg->mm, optarg); break;
 			default: help(); return 1;
 		}
 	}
@@ -164,8 +164,6 @@ static int parse_config_ut(struct mg *mg, ut *cfg)
 			mg->options.sync = ut_int(subcfg);
 		} else if (streq(key, "root")) {
 			mg->options.stats_root = ut_char(subcfg);
-		} else if (streq(key, "name")) {
-			mg->options.stats_name = ut_char(subcfg);
 		} else if (streq(key, "session")) {
 			mg->options.stats_sess = ut_char(subcfg);
 		} else if (streq(key, "dump")) {
