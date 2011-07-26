@@ -5,6 +5,7 @@
 
 #include "schedule.h"
 #include "generator.h"
+#include "stats.h"
 
 void mgs_schedule_all_lines(struct mg *mg)
 {
@@ -28,6 +29,8 @@ void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 {
 	struct timeval now, wanted, tv;
 
+	mgstats_db_count(sch->mg->stats, "scheduler_evt");
+
 	/* first "last run" is at the origin */
 	if (sch->last.tv_sec == 0) {
 		sch->last.tv_sec = sch->mg->origin.tv_sec;
@@ -37,30 +40,22 @@ void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 	/* compute and update accurate absolute location of requested moment */
 	timeradd(&sch->last, timeout, &wanted);
 
-	/* store last schedule */
-	sch->last.tv_sec  = wanted.tv_sec;
-	sch->last.tv_usec = wanted.tv_usec;
-
-	/* calculate time distance */
+	/* how it looks compared to time now? */
 	gettimeofday(&now, NULL);
-	if (now.tv_sec > wanted.tv_sec) {
-		dbg(1, "lagging over 1s\n");
-		sch->lagging = true;
+
+	if (timercmp(&now, &wanted, >)) {
 		timerclear(&tv);
-	} else if (now.tv_sec == wanted.tv_sec && now.tv_usec >= wanted.tv_usec) {
-		sch->lagging = true;
-		timerclear(&tv);
+		mgstats_db_count(sch->mg->stats, "scheduler_lag");
 	} else {
-		sch->lagging = false;
 		timersub(&wanted, &now, &tv);
 	}
 
 	/* schedule */
-	//if (sch->cb && sch->lagging) {
-	//	sch->cb(-1, EV_TIMEOUT, sch->arg);
-	//} else {
-		evtimer_add(&sch->ev, &tv);
-	//}
+	evtimer_add(&sch->ev, &tv);
+
+	/* store last schedule */
+	sch->last.tv_sec  = wanted.tv_sec;
+	sch->last.tv_usec = wanted.tv_usec;
 }
 
 void mgs_uschedule(struct schedule *sch, uint32_t time_us)

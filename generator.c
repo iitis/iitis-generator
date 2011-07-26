@@ -448,6 +448,28 @@ static void handle_packet(struct sniff_pkt *pkt)
 	return;
 }
 
+/** Aggregate stats from all lines */
+static bool _stats_aggregate_lines(struct mg *mg, ut *ut, void *arg)
+{
+	int i;
+
+	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
+		if (!mg->lines[i])
+			continue;
+
+		mgstats_db_aggregate(ut, mg->lines[i]->stats);
+	}
+
+	return true;
+}
+
+/** Global stats */
+static bool _stats_global(struct mg *mg, ut *ut, void *arg)
+{
+	mgstats_db_aggregate(ut, mg->stats);
+	return true;
+}
+
 int main(int argc, char *argv[])
 {
 	mmatic *mm = mmatic_create();
@@ -490,6 +512,26 @@ int main(int argc, char *argv[])
 	/* parse traffic file */
 	if (parse_traffic(mg))
 		return 3;
+
+	/* global stats */
+	mg->stats = mgstats_db_create(mg);
+	mgstats_writer_add(mg, _stats_global, NULL,
+		NULL, "generatorstats.txt",
+		"scheduler_evt",
+		"scheduler_lag",
+		NULL);
+
+	/* global line stats writer */
+	mgstats_writer_add(mg, _stats_aggregate_lines, NULL,
+		NULL, "linestats.txt",
+		"snt_ok",
+		"snt_time",
+		"rcv_ok",
+		"rcv_ok_bytes",
+		"rcv_dup",
+		"rcv_dup_bytes",
+		"rcv_lost",
+		NULL);
 
 	/* synchronize */
 	mgc_sync(mg);

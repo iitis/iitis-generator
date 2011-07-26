@@ -74,7 +74,6 @@ struct schedule {
 
 	struct event ev;                 /** libevent handle */
 	struct timeval last;             /** absolute time of last run */
-	bool lagging;                    /** true if task is lagging */
 
 	void (*cb)(int, short, void *);  /** timer callback */
 	void *arg;                       /** timer callback argument */
@@ -116,6 +115,8 @@ struct interface {
 
 	ut *stats;                 /** statistics */
 	thash *linkstats_root;     /** link statistics dbs: "srcid-dstid" -> ut *linkstats */
+
+	FILE *dumpfile;            /** dump file */
 };
 
 /** A function which does statistics aggregation
@@ -185,6 +186,8 @@ struct mg {
 	struct event statsev;      /** stats write event */
 	const char *stats_dir;     /** final stats dir path */
 	tlist *stats_writers;      /** tlist of struct stats_writer */
+
+	ut *stats;                 /** global iitis-generator statistics */
 };
 
 /** mg frame format */
@@ -202,6 +205,7 @@ struct mg_hdr {
 struct sniff_pkt {
 	struct interface *interface;  /** interface packet arrived on */
 	uint8_t pkt[PKT_BUFSIZE];     /** raw frame */
+	int len;                      /** length of raw frame */
 	bool dupe;                    /** if 1, its a duplicate */
 
 	struct {

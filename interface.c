@@ -18,21 +18,7 @@
 
 #include "generator.h"
 #include "stats.h"
-
-/** Aggregate stats from all lines */
-static bool _stats_aggregate_lines(struct mg *mg, ut *ut, void *arg)
-{
-	int i;
-
-	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
-		if (!mg->lines[i])
-			continue;
-
-		mgstats_db_aggregate(ut, mg->lines[i]->stats);
-	}
-
-	return true;
-}
+#include "dump.h"
 
 static bool _stats_write_interface(struct mg *mg, ut *dst, void *arg)
 {
@@ -218,34 +204,35 @@ static void _mgi_sniff(int fd, short event, void *arg)
 {
 	struct interface *interface = arg;
 	struct sniff_pkt pkt;
-	int ret, n;
+	int n;
 	struct ieee80211_radiotap_iterator parser;
 	uint8_t *ieee80211_hdr;
 	struct mg_hdr *mg_hdr;
 
-	gettimeofday(&pkt.timestamp, NULL);
 	memset((void *) &pkt, 0, sizeof pkt);
+	gettimeofday(&pkt.timestamp, NULL);
+	pkt.interface = interface;
 
-
-	ret = recvfrom(fd, pkt.pkt, PKT_BUFSIZE, MSG_DONTWAIT, NULL, NULL);
-	if (ret <= 0) {
+	pkt.len = recvfrom(fd, pkt.pkt, PKT_BUFSIZE, MSG_DONTWAIT, NULL, NULL);
+	if (pkt.len <= 0) {
 		if (errno != EAGAIN)
 			dbg(1, "recvfrom(): %s\n", strerror(errno));
 		return;
 	}
 
+	if (interface->mg->options.dump)
+		mgd_dump(&pkt);
+
 	/*
 	 * parse radiotap header
 	 */
-	if (ieee80211_radiotap_iterator_init(&parser, (void *) pkt.pkt, ret) < 0) {
+	if (ieee80211_radiotap_iterator_init(&parser, (void *) pkt.pkt, pkt.len) < 0) {
 		dbg(1, "ieee80211_radiotap_iterator_init() failed\n");
 		return;
 	}
 
-	pkt.size = ret - parser.max_length;
-	pkt.interface = interface;
+	pkt.size = pkt.len - parser.max_length;
 
-	memset(&(pkt.radio), 0, sizeof pkt.radio);
 	while ((n = ieee80211_radiotap_iterator_next(&parser)) == 0) {
 		switch (parser.this_arg_index) {
 			case IEEE80211_RADIOTAP_TSFT:
@@ -520,18 +507,6 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 
 			NULL);
 	}
-
-	/* global line stats writer */
-	mgstats_writer_add(mg, _stats_aggregate_lines, NULL,
-		NULL, "linestats.txt",
-		"snt_ok",
-		"snt_time",
-		"rcv_ok",
-		"rcv_ok_bytes",
-		"rcv_dup",
-		"rcv_dup_bytes",
-		"rcv_lost",
-		NULL);
 
 	return count;
 }
