@@ -167,6 +167,7 @@ struct mg {
 		const char *stats_sess; /** stats session name */
 		uint16_t sync;          /** sync time [s] */
 		bool dump;              /** dump raw frames to disk */
+		bool world;             /** make stats dirs 0777 and files 0666 */
 	} options;
 
 	/** interfaces - see interface.c */

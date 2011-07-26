@@ -68,11 +68,11 @@ void cmd_packet_in(struct sniff_pkt *pkt)
 {
 	struct cmd_packet *cp = pkt->line->prv;
 
-	if (cp->last_ctr) {
+/*	if (cp->last_ctr) {
 		if (cp->last_ctr + 1 != pkt->mg_hdr.line_ctr) {
 			dbg(1, "line %u: lost: wanted=%u\n", pkt->line->line_num, cp->last_ctr + 1);
 		}
-	}
+	}*/
 
 	cp->last_ctr = pkt->mg_hdr.line_ctr;
 }
