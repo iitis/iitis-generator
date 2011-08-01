@@ -45,7 +45,7 @@
 #define PKT_TOTAL_OVERHEAD (PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE + sizeof(struct mg_hdr))
 
 /** Maximum number of lines in traffic file */
-#define TRAFFIC_LINE_MAX 10000
+#define TRAFFIC_LINE_MAX 1000
 
 /** Default output root directory */
 #define DEFAULT_STATS_ROOT "./out"

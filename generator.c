@@ -478,6 +478,33 @@ static bool _stats_global(struct mg *mg, ut *ut, void *arg)
 	return true;
 }
 
+/** Initialize global stats stuff */
+static void _stats_init(struct mg *mg)
+{
+	mg->stats = mgstats_db_create(mg);
+
+	/* iitis-generator internal stats */
+	mgstats_writer_add(mg,
+		_stats_global, NULL,
+		NULL, "internal-stats.txt",
+		"scheduler_evt",
+		"scheduler_lag",
+		NULL);
+
+	/* global stats of line generators */
+	mgstats_writer_add(mg,
+		_stats_aggregate_lines, NULL,
+		NULL, "linestats.txt",
+		"snt_ok",
+		"snt_time",
+		"rcv_ok",
+		"rcv_ok_bytes",
+		"rcv_dup",
+		"rcv_dup_bytes",
+		"rcv_lost",
+		NULL);
+}
+
 int main(int argc, char *argv[])
 {
 	mmatic *mm = mmatic_create();
@@ -531,31 +558,14 @@ int main(int argc, char *argv[])
 	 * all OK, prepare to start
 	 */
 
-	/* global stats */
-	mg->stats = mgstats_db_create(mg);
-	mgstats_writer_add(mg, _stats_global, NULL,
-		NULL, "generatorstats.txt",
-		"scheduler_evt",
-		"scheduler_lag",
-		NULL);
-
-	/* global line stats writer */
-	mgstats_writer_add(mg, _stats_aggregate_lines, NULL,
-		NULL, "linestats.txt",
-		"snt_ok",
-		"snt_time",
-		"rcv_ok",
-		"rcv_ok_bytes",
-		"rcv_dup",
-		"rcv_dup_bytes",
-		"rcv_lost",
-		NULL);
-
 	/* synchronize time reference point on all nodes */
 	mgc_sync(mg);
 
 	/* schedule stats writing */
 	mgstats_start(mg);
+
+	/* attach global stats */
+	_stats_init(mg);
 
 	/* schedule heartbeat and disk sync signals */
 	heartbeat_init(mg);

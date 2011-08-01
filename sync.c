@@ -217,6 +217,7 @@ void mgc_sync(struct mg *mg)
 	mgs.node_max = 0;
 	mgs.node_count = 0;
 
+	/* find first and last node taking part in this experiment */
 	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
 		if (!mg->lines[i])
 			continue;
@@ -240,11 +241,12 @@ void mgc_sync(struct mg *mg)
 	}
 
 	mgs.evb = event_base_new();
-	mgs.exist = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
-	mgs.senders = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
-	mgs.receivers = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
-	mgs.acked = mmatic_zalloc(mg->mmtmp, sizeof(uint8_t) * (mgs.node_max + 1));
+	mgs.exist = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
+	mgs.senders = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
+	mgs.receivers = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
+	mgs.acked = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
 
+	/* create .exist, .senders and .receivers arrays */
 	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
 		if (!mg->lines[i])
 			continue;
@@ -278,8 +280,4 @@ void mgc_sync(struct mg *mg)
 		mg->receiver = true;
 
 	event_base_free(mgs.evb);
-	mmatic_freeptr(mgs.exist);
-	mmatic_freeptr(mgs.senders);
-	mmatic_freeptr(mgs.receivers);
-	mmatic_freeptr(mgs.acked);
 }
