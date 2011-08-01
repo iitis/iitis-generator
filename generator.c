@@ -400,7 +400,11 @@ static void heartbeat(int fd, short evtype, void *arg)
 	static struct timeval now, diff, tv = {0, 0};
 	struct mg *mg = arg;
 
-	/* TODO: garbage collector? */
+	/* garbage collector - free whenever garbage > 128KB */
+	if (mmatic_size(mg->mmtmp) > 1024 * 128) {
+		mmatic_free(mg->mmtmp);
+		mg->mmtmp = mmatic_create();
+	}
 
 	/* if no line generator is running and there was no packet to us in last 10 seconds - exit */
 	if (mg->running == 0) {

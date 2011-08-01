@@ -14,7 +14,6 @@
 #include "generator.h"
 
 #define PORT 31337
-#define PASS "START"
 
 #define SLAVE_TIMEOUT 3
 #define MASTER_OFFER 5
