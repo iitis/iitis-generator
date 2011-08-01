@@ -1,6 +1,6 @@
 /doc/*.html
 /doc/*.[0-9]
-generator
+iitis-generator
 version.h
 .*.swp
 *.o
