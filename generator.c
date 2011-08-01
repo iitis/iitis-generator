@@ -483,10 +483,12 @@ int main(int argc, char *argv[])
 	mmatic *mm = mmatic_create();
 	mmatic *mmtmp = mmatic_create();
 	struct mg *mg;
+	int i;
 
 	/*
-	 * initialization
+	 * initialize and parse config
 	 */
+
 	mg = mmzalloc(sizeof(struct mg));
 	mg->mm = mm;
 	mg->mmtmp = mmtmp;
@@ -504,14 +506,18 @@ int main(int argc, char *argv[])
 			return 4;
 	}
 
+	/*
+	 * config syntax looks OK, see if it is feasible
+	 */
+
 	/* init libevent */
 	mg->evb = event_init();
 	event_set_log_callback(libevent_log);
 
-	/* init stats so mgstats_aggregator_add() used somewhere below works */
+	/* init stats structures so mgstats_aggregator_add() used somewhere below works */
 	mgstats_init(mg);
 
-	/* raw interfaces */
+	/* attach to raw interfaces */
 	if (mgi_init(mg, handle_packet) <= 0) {
 		dbg(0, "no available interfaces found\n");
 		return 2;
@@ -520,6 +526,10 @@ int main(int argc, char *argv[])
 	/* parse traffic file */
 	if (parse_traffic(mg))
 		return 3;
+
+	/*
+	 * all OK, prepare to start
+	 */
 
 	/* global stats */
 	mg->stats = mgstats_db_create(mg);
@@ -541,28 +551,44 @@ int main(int argc, char *argv[])
 		"rcv_lost",
 		NULL);
 
-	/* synchronize */
+	/* synchronize time reference point on all nodes */
 	mgc_sync(mg);
 
-	/* heartbeat and disk sync signals */
+	/* schedule stats writing */
+	mgstats_start(mg);
+
+	/* schedule heartbeat and disk sync signals */
 	heartbeat_init(mg);
 	sync_init(mg);
 
-	/* schedule all line generators */
-	mgs_schedule_all_lines(mg);
+	/* schedule the real work of this node: line generators */
+	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
+		if (!mg->lines[i])
+			continue;
+		if (mg->lines[i]->srcid != mg->options.myid)
+			continue;
 
-	/* start stats */
-	mgstats_start(mg);
+		/* this will schedule first execution */
+		mgs_sleep(mg->lines[i], NULL);
+		mg->running++;
+	}
 
 	/*
-	 * main loop
+	 * start!
 	 */
+
 	dbg(0, "Starting\n");
 	event_base_dispatch(mg->evb);
 
-	/* cleanup */
+	/*******************************/
+
+	/*
+	 * cleanup after end of libevent loop
+	 */
+
 	event_base_free(mg->evb);
-	mmatic_free(mm);
+	mmatic_free(mg->mm);
+	mmatic_free(mg->mmtmp);
 
 	return 0;
 }

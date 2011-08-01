@@ -7,24 +7,6 @@
 #include "generator.h"
 #include "stats.h"
 
-void mgs_schedule_all_lines(struct mg *mg)
-{
-	int i;
-
-	/* run all lines belonging to this node */
-	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
-		if (!mg->lines[i])
-			continue;
-
-		if (mg->lines[i]->srcid != mg->options.myid)
-			continue;
-
-		/* this will schedule first execution */
-		mgs_sleep(mg->lines[i], NULL);
-		mg->running++;
-	}
-}
-
 void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 {
 	struct timeval now, wanted, tv;

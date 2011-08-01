@@ -262,6 +262,7 @@ void mgc_sync(struct mg *mg)
 		}
 	}
 
+	/* include senders, receivers and both */
 	if (mg->options.myid == mgs.node_min) { /* master */
 		mg->master = true;
 		_master(&mgs);

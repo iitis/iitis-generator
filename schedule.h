@@ -8,9 +8,6 @@
 
 #include "generator.h"
 
-/** Schedule all our lines (used once on startup) */
-void mgs_schedule_all_lines(struct mg *mg);
-
 /** Accurately schedule event to run again
  * Uses absolute time to maintain accurate time pause
  * @param event      event
