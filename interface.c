@@ -220,9 +220,6 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		return;
 	}
 
-	if (interface->mg->options.dump)
-		mgd_dump(&pkt);
-
 	/*
 	 * parse radiotap header
 	 */
@@ -232,6 +229,13 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	}
 
 	pkt.size = pkt.len - parser.max_length;
+	ieee80211_hdr = (uint8_t *) pkt.pkt + parser.max_length;
+
+	if (interface->mg->options.dump) {
+		/* if frame not a beacon OR option "dump beacons" is on */
+		if (ieee80211_hdr[0] != 0x80 || interface->mg->options.dumpb)
+			mgd_dump(&pkt);
+	}
 
 	while ((n = ieee80211_radiotap_iterator_next(&parser)) == 0) {
 		switch (parser.this_arg_index) {
@@ -316,7 +320,6 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		return;
 	}
 
-	ieee80211_hdr = (uint8_t *) pkt.pkt + parser.max_length;
 	pkt.dstid = ieee80211_hdr[9];
 	pkt.srcid = ieee80211_hdr[15];
 
@@ -470,6 +473,7 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 		count++;
 
 		mg->interface[i].mg = mg;
+		mg->interface[i].name = mmatic_strdup(mg->mm, name);
 		mg->interface[i].num = i;
 		mg->interface[i].fd = fd;
 		mg->interface[i].stats = mgstats_db_create(mg);
@@ -514,7 +518,7 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid)
 {
 	ut *stats;
-	char key[64], ifname[64], filename[64];
+	char key[64], filename[64];
 
 	if (dstid != interface->mg->options.myid)
 		return NULL;
@@ -526,10 +530,9 @@ ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid)
 		stats = ut_new_utthash(NULL, interface->mg->mm);
 		thash_set(interface->linkstats_root, key, stats);
 
-		snprintf(ifname, sizeof ifname, IFNAME_FMT, interface->num);
-		snprintf(filename, sizeof filename, "link-%u-%u.txt", srcid, dstid);
+		snprintf(filename, sizeof filename, "link-%u->%u.txt", srcid, dstid);
 		mgstats_writer_add(interface->mg, _stats_write_link, stats,
-			ifname, filename,
+			interface->name, filename,
 			"rcv_ok",
 			"rcv_ok_bytes",
 			"rcv_dup",

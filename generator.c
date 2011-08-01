@@ -165,6 +165,10 @@ static int parse_config_ut(struct mg *mg, ut *cfg)
 			mg->options.stats_sess = ut_char(subcfg);
 		} else if (streq(key, "dump")) {
 			mg->options.dump = ut_bool(subcfg);
+		} else if (streq(key, "dump-size")) {
+			mg->options.dumpsize = ut_int(subcfg);
+		} else if (streq(key, "dump-beacons")) {
+			mg->options.dumpb = ut_bool(subcfg);
 		} else {
 			dbg(0, "unrecognized configuration file option: %s\n", key);
 			return 1;

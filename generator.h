@@ -109,6 +109,7 @@ struct line {
 /** Represents network interface */
 struct interface {
 	struct mg *mg;             /** root */
+	const char *name;          /** interface name */
 	int num;                   /** interface number */
 	int fd;                    /** raw interface socket */
 	struct event evread;       /** read event */
@@ -167,8 +168,11 @@ struct mg {
 		const char *stats_root; /** stats root directory */
 		const char *stats_sess; /** stats session name */
 		uint16_t sync;          /** sync time [s] */
-		bool dump;              /** dump raw frames to disk */
 		bool world;             /** make stats dirs 0777 and files 0666 */
+
+		bool dump;              /** dump raw frames to disk */
+		int dumpsize;           /** max size of dumped frames */
+		bool dumpb;             /** include beacons in dump files */
 	} options;
 
 	/** interfaces - see interface.c */
