@@ -1,5 +1,5 @@
-/doc/*.html
-/doc/*.[0-9]
+/doc/out
+/doc/index.txt
 iitis-generator
 version.h
 .*.swp
