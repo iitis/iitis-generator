@@ -1,10 +1,13 @@
 RONN ?= ronn --organization="IITiS PAN Gliwice" --pipe
 
 default: all
-all: out/iitis-generator.1.man out/iitis-generator.1.html
+all: \
+	out/iitis-generator.1.man out/iitis-generator.1.html \
+	out/iitis-generator-conf.5.man out/iitis-generator-conf.5.html \
+	out/iitis-generator-traffic.5.man out/iitis-generator-traffic.5.html
 
 index.txt: *.markdown
-	./mkindex.sh > index.txt
+	./mkindex.sh
 
 out/%.man : %.markdown index.txt
 	mkdir -p out

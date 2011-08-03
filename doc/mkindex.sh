@@ -6,4 +6,13 @@ for i in *.markdown; do
 	num="${j%%.*}"
 
 	echo "$name($num) $name.$num"
-done
+done > ./.index.txt
+
+if ! diff ./index.txt ./.index.txt 2>/dev/null; then
+	mv ./.index.txt ./index.txt
+	echo "index.txt updated"
+else
+	rm -f ./.index.txt
+fi
+
+exit 0
