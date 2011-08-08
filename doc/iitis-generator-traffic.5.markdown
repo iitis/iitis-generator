@@ -9,7 +9,7 @@ traffic.txt
 
 iitis-generator(1) is a tool for distributed, statistical evaluation of wireless networks. Each
 network node that takes part in an evaluation experiment runs the `iitis-generator` program. This
-manual page documents the file describing the traffic to be generated in a network.
+manual page documents format of the file describing the traffic to be generated in test networkss.
 
 ## FILE FORMAT
 
@@ -68,21 +68,23 @@ Use 0 for automatic selection by the driver.
 
 Use either value 0 (enable ACK) or 1 (disable ACK).
 
-`8.` `command`: generator command (see [COMMANDS][])
+`8.` `command`: line command (see [COMMANDS][])
 
 `9.` `params...`: optional command parameters
 
+Traffic file can have 1000 lines at most.
+
 ## COMMANDS
 
-Line command chooses characteristics of the traffic that will be generated according to line
-specification, given before command name and options.
+Line command chooses characteristics of the traffic that will be generated with parameters chosen in
+line specification, before the command part.
 
 Currently, only one command is supported - `packet` - which sends a simple frame, optionally
 repeated with a fixed time period. Command syntax:
 
   *packet* [*len* [*num* [*T*]]]
 
-`1.` `len`: frame length, default 100B (integer ~100+)
+`1.` `len`: frame length, default 100B (integer 100-1500)
 
 This defines the total frame length in the air, ie. it includes the IEEE 802.11, LLC and
 iitis-generator headers. If there is a remaining space, frame payload is filled with line definition,

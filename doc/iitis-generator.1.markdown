@@ -14,30 +14,22 @@ and we want detailed statistical data for each node.
 Motivations behind this fundamental question are - for instance - the need to assess service quality
 and the need to predict the performance of the network. There exist an approach to solve this
 problem by means of digital modelling and simulation. The `iitis-generator` program, however,
-is a supportive tool for alternative approach, complementary to network simulation.
+is a supportive tool for an alternative approach, complementary to network simulation.
 
-In this approach, real traffic is generated in a physical network, and results of such experiment
-may be used to answer the question on network performance.
+In this approach, real traffic is generated in a physical network and statistical data is collected.
+Results of such experiment can be used for further search for the answer to the question on network
+performance.
 
 ## DESCRIPTION
 
-`iitis-generator` is run parallely on many network nodes at the same time. The nodes must be
-connected with an IP network used as a *service network*, and any numbers of other networks to be
-put under the test.
-
-`iitis-generator` basically does the following work on a given network node:
+`iitis-generator` is run on many network nodes at the same time. All nodes are connected to an IP
+network used as a *service network*, and to any number of *test networks*, on which traffic is to be
+generated. Basically, following work is done on each node:
 
 1. read traffic characteristics from <TRAFFIC FILE>,
-1. wait for all nodes to prepare, so a common start moment is reached,
-1. generate and receive traffic,
+1. negotiate a common experiment start moment using the service network,
+1. generate and receive traffic on test networks,
 1. periodically write statistics to disk.
-
-The program will handle node synchronization on its own, but it requires a reliable system clock.
-Typically, running an NTP client on each node is enough to have a 1ms accuracy in a LAN environment.
-
-Traffic is generated at low level, through the packet injection facility of the Linux mac80211
-subsystem. Hence, a precise control over wireless frames is possible. Traffic is captured using
-the *monitor mode* of wireless interfaces.
 
 As the output, a directory with a tree-like structure is created. It contains:
 
@@ -49,7 +41,38 @@ See iitis-generator-output(5) for documentation on the structure and contents of
 directory.
 
 `iitis-generator` is written in C and designed to be run on embedded systems, especially MikroTik
-RouterBoard running [OpenWrt](http://www.openwrt.org/).
+RouterBoards running [OpenWrt](http://www.openwrt.org/).
+
+## NETWORK ENVIRONMENT
+
+The test traffic is generated using the low level packet injection facility of the Linux mac80211
+subsystem. Hence, a precise control over wireless frames is possible. Traffic capture is realized
+in similar way.
+
+In order to make a wireless interface available to be used by `iitis-generator`, it must be put into
+the *monitor mode* and named like "mon\*", where \* is a number 0-7, e.g. "mon0". This interface number
+is also used in [the traffic file][iitis-generator-traffic(5)].
+
+Frames generated in test networks have 3 headers:
+
+1. IEEE 802.11 header (24B + 4B FCS)
+1. LLC header, encapsulated Ethernet (8B),
+1. `iitis-generator` header (20B).
+
+The service network is realized by:
+
+1. sending UDP broadcast (255.255.255.255) frames on port 31337,
+1. replying with UDP unicast frames.
+
+By default, the "eth0" interface is used. This can be changed using the "svc-ifname" option (see
+iitis-generator-conf(5)).
+
+Currently, the service network is used only during the initial node synchronization phase. The node
+with the lowest ID is chosen as a *master*, and all other nodes are *slaves*. Master will
+periodically propose a time moment to be considered as the start of whole experiment, until all
+slaves reply with a positive acknowledgement. However, a reliable system clock is required on all
+nodes. Typically, running NTP on each node is enough to have a 1ms accuracy in a typical LAN
+environment.
 
 ## OPTIONS
 
@@ -59,13 +82,13 @@ RouterBoard running [OpenWrt](http://www.openwrt.org/).
   ID number of this node; by default it will be extracted from the hostname, e.g. "router5" gives number 5
 
   * `--root`=<directory>:
-  the *root* directory for program output; by default "./out"
+  the *root* directory for the program output; by default "./out"
 
   * `--sess`=<name>:
   optional session name; it will be used as a prefix for program output directory name
 
   * `--world` :
-  make all generated files and directories readable and writable by everyone
+  make all generated files and directories readable and writable by anyone
 
   * `--verbose`,`-V`:
   be verbose; alias for `--debug=5`

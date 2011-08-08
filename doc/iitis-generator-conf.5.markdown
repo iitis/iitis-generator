@@ -56,12 +56,11 @@ Following options can be configured:
 
   * `stats`=*int*: statistics write period
 
-	Defines how often to generate statistics and write them to disk, as a new line in statistics
-	files. Notice that on each such event, all statistics of a *counter* type will be set back to
-	zero after writing to disk.
+	Defines how often to generate statistics and write them to disk (new lines in statistics files).
+	Notice that after such event all statistics of a *counter* type will be set back to zero.
 
-	Set `stats` to 0 if you wish to disable statistics. This will also disable any output of the
-	program in the form of directories or files.
+	Set `stats` to 0 if you wish to disable statistics. This will also disable any file-system
+	output of the program.
 
   * `sync`=*int*: [sync(2)](http://linux.die.net/man/2/sync) period
 
@@ -81,9 +80,9 @@ Following options can be configured:
 
   * `dump`=*bool*: dump raw frames to disk
 
-	Enable this option to dump all incoming and outgoing frames except WiFi beacons to be saved to
-	disk. A PCAP format is used and the resultant file can be found in the directory with interface
-	statistics (see iitis-generator-output(5)).
+	Enable this option to dump all incoming and outgoing frames, except WiFi beacons. A PCAP file
+	format is used and resultant files can be found in the directory with interface statistics (see
+	iitis-generator-output(5)).
 
   * `dump-size`=*int*: limit size of dumped frames
 
@@ -92,9 +91,13 @@ Following options can be configured:
 
   * `dump-beacons`=*bool*: include beacons in dumped frames
 
-	Dont skip WiFi beacons in frame dumps. Notice that a beacon can be generated about 10 times per
-	second by each node. However, it may be useful to somehow ensure that no other wireless network
-	was operating on the same channel at the same time, thus disturbing the experiment.
+	Dont skip WiFi beacons in frame dumps. Notice that beacons can be generated about 10 times per
+	second by each node. However, they may be useful in order to detect other wireless networks
+	operating on the same channel, thus possibly disturbing the experiment.
+
+  * `svc-ifname`=*string*: service network interface name
+
+	Choose the interface connected to the service network. Default: "eth0".
 
 ## AUTHOR AND COPYRIGHT INFO
 
