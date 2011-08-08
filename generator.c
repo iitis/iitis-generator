@@ -58,6 +58,15 @@ static void version(void)
 	printf("Licensed under GNU GPL v3.\n");
 }
 
+/** Apply default options */
+static void apply_defaults(struct mg *mg)
+{
+	mg->options.stats      = DEFAULT_STATS_PERIOD;
+	mg->options.stats_root = DEFAULT_STATS_ROOT;
+	mg->options.sync       = DEFAULT_SYNC_PERIOD;
+	mg->options.svc_ifname = DEFAULT_SVC_IFNAME;
+}
+
 /** Parses arguments and loads modules
  * @retval 0     ok
  * @retval 1     error, main() should exit (eg. wrong arg. given)
@@ -79,10 +88,6 @@ static int parse_argv(struct mg *mg, int argc, char *argv[])
 		{ "world",      0, NULL,  8  },
 		{ 0, 0, 0, 0 }
 	};
-
-	mg->options.stats      = DEFAULT_STATS_PERIOD;
-	mg->options.stats_root = DEFAULT_STATS_ROOT;
-	mg->options.sync       = DEFAULT_SYNC_PERIOD;
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_opts, long_opts, &i);
@@ -169,6 +174,8 @@ static int parse_config_ut(struct mg *mg, ut *cfg)
 			mg->options.dumpsize = ut_int(subcfg);
 		} else if (streq(key, "dump-beacons")) {
 			mg->options.dumpb = ut_bool(subcfg);
+		} else if (streq(key, "svc-ifname")) {
+			mg->options.svc_ifname = ut_char(subcfg);
 		} else {
 			dbg(0, "unrecognized configuration file option: %s\n", key);
 			return 1;
@@ -519,6 +526,7 @@ int main(int argc, char *argv[])
 	mg = mmzalloc(sizeof(struct mg));
 	mg->mm = mm;
 	mg->mmtmp = mmtmp;
+	apply_defaults(mg);
 
 	/* get my id number from hostname */
 	fetch_myid(mg);

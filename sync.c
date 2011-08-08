@@ -13,8 +13,6 @@
 #include "sync.h"
 #include "generator.h"
 
-#define PORT 31337
-
 #define SLAVE_TIMEOUT 3
 #define MASTER_OFFER 5
 #define MASTER_TIMEOUT 1
@@ -88,7 +86,7 @@ static void _master_tmout(int s, short evtype, void *arg)
 
 	memset((char *) &dst, 0, sizeof dst);
 	dst.sin_family = AF_INET;
-	dst.sin_port = htons(PORT);
+	dst.sin_port = htons(SVC_PORT);
 	dst.sin_addr.s_addr = INADDR_BROADCAST;
 
 	_make_offer(mgs);
@@ -107,7 +105,11 @@ static void _master(struct mg_sync *mgs)
 		die_errno("socket");
 
 	if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &i, sizeof i) < 0)
-		die_errno("setsockopt");
+		die_errno("setsockopt(SO_BROADCAST)");
+
+	if (setsockopt(s, SOL_SOCKET, SO_BINDTODEVICE,
+		mgs->mg->options.svc_ifname, strlen(mgs->mg->options.svc_ifname) + 1) < 0)
+		die_errno("setsockopt(SO_BINDTODEVICE)");
 
 	mgs->hdr.try = 0;
 	mgs->s = s;
@@ -183,9 +185,13 @@ static void _slave(struct mg_sync *mgs)
 	if (s < 0)
 		die_errno("socket");
 
+	if (setsockopt(s, SOL_SOCKET, SO_BINDTODEVICE,
+		mgs->mg->options.svc_ifname, strlen(mgs->mg->options.svc_ifname) + 1) < 0)
+		die_errno("setsockopt(SO_BINDTODEVICE)");
+
 	memset((char *) &dst, 0, sizeof dst);
 	dst.sin_family = AF_INET;
-	dst.sin_port = htons(PORT);
+	dst.sin_port = htons(SVC_PORT);
 	dst.sin_addr.s_addr = INADDR_ANY;
 
 	if (bind(s, (struct sockaddr *) &dst, sizeof dst) < 0)

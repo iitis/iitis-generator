@@ -14,6 +14,12 @@
 #define IFNAME_FMT "mon%d"
 #define IFINDEX_MAX 8
 
+/** default service network interface */
+#define DEFAULT_SVC_IFNAME "eth0"
+
+/** port to use on service network */
+#define SVC_PORT 31337
+
 /** max number of arguments to command in a traffic file line */
 #define LINE_ARGS_MAX 8
 
@@ -164,6 +170,7 @@ struct mg {
 		uint8_t myid;           /** my id number */
 		const char *traf_file;  /** traffic file path */
 		const char *conf_file;  /** config file path */
+
 		uint32_t stats;         /** time between stats write [s] */
 		const char *stats_root; /** stats root directory */
 		const char *stats_sess; /** stats session name */
@@ -173,6 +180,8 @@ struct mg {
 		bool dump;              /** dump raw frames to disk */
 		int dumpsize;           /** max size of dumped frames */
 		bool dumpb;             /** include beacons in dump files */
+
+		const char *svc_ifname; /** name of service network interface */
 	} options;
 
 	/** interfaces - see interface.c */
