@@ -23,23 +23,18 @@ performance.
 ## DESCRIPTION
 
 `iitis-generator` is basically a traffic generator. It is run on many network hosts at the same
-time. Each host is called a *node*. All nodes may be connected to many *test networks* - on which
-traffic is to be generated - and must be connected to one IP *service network*. Basically, on each
-node, following work is done:
+time. Each host is called a *node*. Each node may be connected to many *test networks* - on which
+traffic is to be generated - and also must be connected to one IP *service network*.
 
-1. read traffic characteristics from <TRAFFIC FILE>,
-1. negotiate a common experiment start moment using the service network,
-1. generate and receive traffic on test networks,
-1. periodically write statistics to disk.
+Basically `iitis-generator` does the following:
 
-As the output, a directory with a tree-like structure is created. It contains:
+1. parse traffic characteristics in <TRAFFIC FILE>
+1. negotiate a common experiment start moment using the service network
+1. generate and receive traffic on test networks
+1. periodically write statistics to disk
 
-* statistics stored in text files,
-* copies of <TRAFFIC FILE> and <CONFIG FILE>,
-* frame dump files in pcap format, if enabled.
-
-See iitis-generator-output(5) for documentation on the structure and contents of the output
-directory.
+As the output, a directory with a tree-like structure is created. It contains the resultant network
+statistics, amongst the others (see [OUTPUT][]).
 
 `iitis-generator` is written in C and designed to be run on embedded systems, especially MikroTik
 RouterBoards running [OpenWrt](http://www.openwrt.org/).
@@ -57,13 +52,13 @@ is also used in [the traffic file][iitis-generator-traffic(5)].
 Frames generated in test networks have 3 headers:
 
 1. IEEE 802.11 header (24B + 4B FCS)
-1. LLC header, encapsulated Ethernet (8B),
-1. `iitis-generator` header (20B).
+1. LLC header, encapsulated Ethernet (8B)
+1. `iitis-generator` header (20B)
 
 The service network is realized by:
 
-1. sending UDP broadcast (255.255.255.255) frames on port 31337,
-1. replying with UDP unicast frames.
+1. sending UDP broadcast (255.255.255.255) frames on port 31337
+1. replying with UDP unicast frames
 
 By default, the "eth0" interface is used. This can be changed using the "svc-ifname" option (see
 iitis-generator-conf(5)). Currently, the service network is used only for node synchronization.
@@ -76,10 +71,10 @@ short), common for all nodes. This moment is chosen on the wall clock. Such appr
 advantage of opening a possibility for an external program working on wall clock synchronization
 parallely to `iitis-generator`.
 
-Node synchronization is realized during startup, in a master-slave manner, as follows. The node with
-the lowest ID is chosen as the *master*, and all other nodes become *slaves*. Master will
-periodically propose some origin a few seconds ahead the wall clock, until all slaves reply with a
-positive acknowledgement.
+Node synchronization is realized during startup, in a master-slave manner. The node with the lowest
+ID is chosen as the *master*, and all other nodes become *slaves*. Master will periodically propose
+some origin a few seconds ahead the wall clock, until all slaves reply with a positive
+acknowledgement.
 
 A reliable wall clock source is required on all nodes. Running NTP on each node is enough to have a
 1 ms accuracy in a typical LAN environment.
@@ -112,8 +107,7 @@ A reliable wall clock source is required on all nodes. Running NTP on each node 
   * `--version`,`-v`:
   display version and copying information
 
-Most options can be overriden in the <CONFIG FILE>, which is applied after command line options (see
-[CONFIG FILE][]).
+Most options can be overriden in the <CONFIG FILE>, which is applied after command line options.
 
 ## CONFIG FILE
 
@@ -147,6 +141,28 @@ The <TRAFFIC FILE> is common for the whole network. Exemplary few lines below.
 	10.0 0  7 4  54 1 packet 1 1500
 
 See iitis-generator-traffic(5) for further documentation.
+
+## OUTPUT
+
+Exemplary output structure:
+
+	2011.07/
+	*-- session-name/
+	    *--- 2011.07.26-15:40:25/
+	        *-- 1/
+	        |   *-- internal-stats.txt
+	        |   *-- linestats.txt
+	        |   *-- mon0/
+	        |   |   *-- dump.pcap
+	        |   |   *-- interface.txt
+	        |   |   *-- link-2->1.txt
+	        *-- 2/
+	            *-- internal-stats.txt
+	            *-- linestats.txt
+	            *-- mon0/
+	                *-- interface.txt
+
+See iitis-generator-output(5) for further documentation.
 
 ## DIAGNOSTICS AND RETURN VALUES
 
