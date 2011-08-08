@@ -22,9 +22,10 @@ performance.
 
 ## DESCRIPTION
 
-`iitis-generator` is run on many network nodes at the same time. All nodes are connected to an IP
-network used as a *service network*, and to any number of *test networks*, on which traffic is to be
-generated. Basically, following work is done on each node:
+`iitis-generator` is basically a traffic generator. It is run on many network hosts at the same
+time. Each host is called a *node*. All nodes may be connected to many *test networks* - on which
+traffic is to be generated - and must be connected to one IP *service network*. Basically, on each
+node, following work is done:
 
 1. read traffic characteristics from <TRAFFIC FILE>,
 1. negotiate a common experiment start moment using the service network,
@@ -65,14 +66,23 @@ The service network is realized by:
 1. replying with UDP unicast frames.
 
 By default, the "eth0" interface is used. This can be changed using the "svc-ifname" option (see
-iitis-generator-conf(5)).
+iitis-generator-conf(5)). Currently, the service network is used only for node synchronization.
 
-Currently, the service network is used only during the initial node synchronization phase. The node
-with the lowest ID is chosen as a *master*, and all other nodes are *slaves*. Master will
-periodically propose a time moment to be considered as the start of whole experiment, until all
-slaves reply with a positive acknowledgement. However, a reliable system clock is required on all
-nodes. Typically, running NTP on each node is enough to have a 1ms accuracy in a typical LAN
-environment.
+## NODE SYNCHRONIZATION
+
+Definitions in the traffic file use relative time moments. In order to synchronize actions being
+taken by nodes, a certain moment of time needs to be chosen as the *time origin* ("origin" for
+short), common for all nodes. This moment is chosen on the wall clock. Such approach has an
+advantage of opening a possibility for an external program working on wall clock synchronization
+parallely to `iitis-generator`.
+
+Node synchronization is realized during startup, in a master-slave manner, as follows. The node with
+the lowest ID is chosen as the *master*, and all other nodes become *slaves*. Master will
+periodically propose some origin a few seconds ahead the wall clock, until all slaves reply with a
+positive acknowledgement.
+
+A reliable wall clock source is required on all nodes. Running NTP on each node is enough to have a
+1 ms accuracy in a typical LAN environment.
 
 ## OPTIONS
 
@@ -85,7 +95,7 @@ environment.
   the *root* directory for the program output; by default "./out"
 
   * `--sess`=<name>:
-  optional session name; it will be used as a prefix for program output directory name
+  optional session name
 
   * `--world` :
   make all generated files and directories readable and writable by anyone

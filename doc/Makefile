@@ -4,6 +4,7 @@ default: all
 all: \
 	out/iitis-generator.1.man out/iitis-generator.1.html \
 	out/iitis-generator-conf.5.man out/iitis-generator-conf.5.html \
+	out/iitis-generator-output.5.man out/iitis-generator-output.5.html \
 	out/iitis-generator-traffic.5.man out/iitis-generator-traffic.5.html
 
 index.txt: *.markdown
