@@ -208,7 +208,6 @@ static int parse_config_ut(struct mg *mg, ut *cfg)
 			/* if its for me... */
 			if (mg->options.myid == num1 ||
 			    (num2 > 0 && (mg->options.myid >= num1 && mg->options.myid <= num2))) {
-				printf("parsing - its for me\n");
 				parse_config_ut(mg, subcfg);
 			}
 		}
