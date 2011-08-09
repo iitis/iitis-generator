@@ -406,15 +406,21 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	/* store time of last frame destined to us */
 	gettimeofday(&interface->mg->last, NULL);
 
-	/* handle duplicates - dont drop - may be needed for stats */
-	n = pkt.mg_hdr.line_ctr - pkt.line->line_ctr_rcv;
-	if (n == 1) {
+	/* handle duplicates; dont drop them - may be needed for stats */
+	n  = pkt.mg_hdr.line_ctr;
+	n -= pkt.line->line_ctr_rcv;
+	if (n > 0) {
 		mgstats_db_count(pkt.line->linkstats, "rcv_ok");
 		mgstats_db_count_num(pkt.line->linkstats, "rcv_ok_bytes", pkt.size);
 
 		mgstats_db_count(pkt.line->stats, "rcv_ok");
 		mgstats_db_count_num(pkt.line->stats, "rcv_ok_bytes", pkt.size);
-	} else if (n < 1) {
+
+		if (n > 1) {
+			mgstats_db_count_num(pkt.line->linkstats, "rcv_lost", n - 1);
+			mgstats_db_count_num(pkt.line->stats, "rcv_lost", n - 1);
+		}
+	} else {
 		pkt.dupe = 1;
 
 		mgstats_db_count(pkt.line->linkstats, "rcv_dup");
@@ -422,9 +428,6 @@ static void _mgi_sniff(int fd, short event, void *arg)
 
 		mgstats_db_count(pkt.line->stats, "rcv_dup");
 		mgstats_db_count_num(pkt.line->stats, "rcv_dup_bytes", pkt.size);
-	} else { /* n > 1 */
-		mgstats_db_count_num(pkt.line->linkstats, "rcv_lost", n - 1);
-		mgstats_db_count_num(pkt.line->stats, "rcv_lost", n - 1);
 	}
 
 	mgstats_db_ewma(pkt.line->linkstats, "rssi", LINK_EWMA_N, pkt.radio.rssi);

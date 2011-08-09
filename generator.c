@@ -413,12 +413,12 @@ static void heartbeat(int fd, short evtype, void *arg)
 		mg->mmtmp = mmatic_create();
 	}
 
-	/* if no line generator is running and there was no packet to us in last 10 seconds - exit */
+	/* if no line generator is running and there was no packet to us in last 60 seconds - exit */
 	if (mg->running == 0) {
 		gettimeofday(&now, NULL);
 		timersub(&now, &mg->last, &diff);
 
-		if (diff.tv_sec >= 10) {
+		if (diff.tv_sec >= 60) {
 			dbg(0, "Finished, exiting...\n");
 			mg->running--;
 			event_base_loopexit(mg->evb, &tv);
