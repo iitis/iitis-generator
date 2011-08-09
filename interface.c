@@ -114,7 +114,7 @@ int mgi_inject(struct interface *interface,
 	memcpy(ieee80211_hdr + 16, bssid, sizeof *bssid);
 
 	gettimeofday(&t1, NULL);
-	ret = sendmsg(interface->fd, &msg, 0);
+	ret = sendmsg(interface->fd, &msg, MSG_DONTWAIT);
 	gettimeofday(&t2, NULL);
 
 	timersub(&t2, &t1, &diff);
