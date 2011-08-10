@@ -22,14 +22,16 @@ static void _stats_writer_free(void *arg)
 }
 
 /** Append statistics line to file */
-static void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
+static void _stats_write(struct mg *mg, struct stats_writer *sa, stats *stats)
 {
 	const char *key;
 	struct timeval now;
 	char buf[256];
-	ut *val;
+	struct stats_node *n;
 
-	/* open file if needed */
+	gettimeofday(&now, NULL);
+
+	/* create file if needed */
 	if (!sa->fh) {
 		/* create dir */
 		snprintf(buf, sizeof buf, "%s/%s", mg->stats_dir, sa->dirname);
@@ -55,24 +57,22 @@ static void _stats_write(struct mg *mg, struct stats_writer *sa, ut *stats)
 	}
 
 	/* 1. put time column */
-	gettimeofday(&now, NULL);
 	snprintf(buf, sizeof buf, "%lu", (unsigned int) now.tv_sec - mg->origin.tv_sec);
 	fputs(buf, sa->fh);
 
 	/* 2+ put requested columns */
 	tlist_iter_loop(sa->columns, key) {
-		val = uth_get(stats, key);
-		if (!val) {
+		n = thash_get(stats->db, key);
+		if (!n) {
 			dbg(10, "no such stats: %s\n", key);
 			snprintf(buf, sizeof buf, " 0");
 		} else {
-			/* NB: dont use ut_char() as it allocates new memory */
-			switch (ut_type(val)) {
-				case T_UINT:
-					snprintf(buf, sizeof buf, " %u", ut_uint(val));
+			switch (n->type) {
+				case STATS_COUNTER:
+					snprintf(buf, sizeof buf, " %u", n->as.counter);
 					break;
-				case T_DOUBLE:
-					snprintf(buf, sizeof buf, " %g", ut_double(val));
+				case STATS_GAUGE:
+					snprintf(buf, sizeof buf, " %d", n->as.gauge);
 					break;
 				default:
 					dbg(1, "unknown type of stat: %s\n", key);
@@ -92,7 +92,7 @@ static void _stats_handler(int fd, short evtype, void *mgarg)
 {
 	struct mg *mg = mgarg;
 	mmatic *mmtmp;
-	ut *ut;
+	stats *stats;
 	struct stats_writer *sa;
 	struct timeval tv = {0, 0};
 
@@ -103,10 +103,10 @@ static void _stats_handler(int fd, short evtype, void *mgarg)
 	/* aggregate and write */
 	mmtmp = mmatic_create();
 	tlist_iter_loop(mg->stats_writers, sa) {
-		ut = ut_new_utthash(NULL, mmtmp);
+		stats = stats_create(mmtmp);
 
-		if (sa->handler(mg, ut, sa->arg))
-			_stats_write(mg, sa, ut);
+		if (sa->handler(mg, stats, sa->arg))
+			_stats_write(mg, sa, stats);
 	}
 	mmatic_free(mmtmp);
 }
@@ -142,7 +142,7 @@ void mgstats_start(struct mg *mg)
 	evtimer_set(&mg->statsev, _stats_handler, mg);
 	evtimer_add(&mg->statsev, &tv);
 
-	/* make two-level directory level based on time */
+	/* make a tree-like directory structure */
 	localtime_r(&mg->origin.tv_sec, &tm);
 	strftime(buf1, sizeof buf1, "%Y.%m", &tm);
 	strftime(buf2, sizeof buf2, "%Y.%m.%d-%H:%M:%S", &tm);
@@ -154,9 +154,8 @@ void mgstats_start(struct mg *mg)
 		stats_session_root = mmatic_printf(mg->mmtmp, "%s/%s/%s",
 			mg->options.stats_root, buf1, buf2);
 
-	/* my stats dir */
-	mg->stats_dir = mmatic_printf(mg->mm, "%s/%u",
-			stats_session_root, mg->options.myid);
+	/* this node's stats dir */
+	mg->stats_dir = mmatic_printf(mg->mm, "%s/%u", stats_session_root, mg->options.myid);
 
 	/* create it or die */
 	if (pjf_mkdir_mode(mg->stats_dir, mg->options.world ? 0777 : 0755) == 0)
@@ -184,8 +183,7 @@ void mgstats_start(struct mg *mg)
 	}
 }
 
-void mgstats_writer_add(struct mg *mg,
-	stats_writer_handler_t handler, void *arg,
+void mgstats_writer_add(struct mg *mg, stats_writer_handler_t handler, void *arg,
 	const char *dir, const char *file, ...)
 {
 	va_list va;
@@ -209,65 +207,75 @@ void mgstats_writer_add(struct mg *mg,
 
 /*****/
 
-ut *mgstats_db_create(struct mg *mg)
+stats *stats_create(mmatic *mm)
 {
-	return ut_new_utthash(NULL, mg->mm);
+	stats *stats;
+
+	stats = mmatic_zalloc(mm, sizeof *stats);
+	stats->mm = mm;
+	stats->db = thash_create_strkey(mmatic_freeptr, stats->mm);
+
+	return stats;
 }
 
-void mgstats_db_count_num(ut *ut, const char *name, uint32_t num)
+void stats_countN(stats *stats, const char *name, uint32_t num)
 {
-	uint32_t count;
+	struct stats_node *n;
 
-	if (!ut)
-		die("ut == NULL");
+	pjf_assert(stats);
 
-	count = uth_uint(ut, name);
-	count += num;
-	uth_set_uint(ut, name, count);
+	n = thash_get(stats->db, name);
+	if (n) {
+		n->as.counter += num;
+	} else {
+		n = mmatic_zalloc(stats->mm, sizeof *n);
+		n->type = STATS_COUNTER;
+		thash_set(stats->db, name, n);
+
+		n->as.counter = num;
+	}
 }
 
-void mgstats_db_ewma(ut *ut, const char *name, uint32_t n, double val)
+void stats_set(stats *stats, const char *name, int val)
 {
-	double ewma;
+	struct stats_node *n;
 
-	if (!ut)
-		die("ut == NULL");
+	pjf_assert(stats);
 
-	ewma = uth_double(ut, name);
-	ewma = EWMA(ewma, val, n);
-	uth_set_double(ut, name, ewma);
+	n = thash_get(stats->db, name);
+	if (!n) {
+		n = mmatic_zalloc(stats->mm, sizeof *n);
+		n->type = STATS_GAUGE;
+		thash_set(stats->db, name, n);
+	}
+
+	n->as.gauge = val;
 }
 
-void mgstats_db_aggregate(ut *dst, ut *src)
+void stats_aggregate(stats *dst_stats, stats *src_stats)
 {
-	thash *srch;
 	char *key;
-	ut *val;
-	uint32_t src_int, dst_int;
-	double src_dbl, dst_dbl;
+	struct stats_node *src, *dst;
 
-	srch = ut_thash(src);
-	thash_iter_loop(srch, key, val) {
-		switch (ut_type(val)) {
-			case T_UINT:
+	thash_iter_loop(src_stats->db, key, src) {
+		dst = thash_get(dst_stats->db, key);
+		if (!dst) {
+			dst = mmatic_zalloc(dst_stats->mm, sizeof *dst);
+			thash_set(dst_stats->db, key, dst);
+		}
+
+		switch (src->type) {
+			case STATS_COUNTER:
 				/* sum */
-				src_int = ut_uint(val);
-				dst_int = uth_uint(dst, key);
-				dst_int += src_int;
-
-				uth_set_uint(dst, key, dst_int);
-				uth_set_uint(src, key, 0);
+				dst->as.counter += src->as.counter;
+				src->as.counter = 0;
 				break;
-			case T_DOUBLE:
-				/* average */
-				src_dbl = ut_double(val);
-				dst_dbl = uth_double(dst, key);
-				dst_dbl = (src_dbl + dst_dbl) / 2.0;
-
-				uth_set_double(dst, key, dst_dbl);
+			case STATS_GAUGE:
+				/* last */
+				dst->as.gauge = src->as.gauge;
 				break;
 			default:
-				dbg(1, "unknown type for stat '%s'\n", key);
+				die("unknown type for stat '%s'\n", key);
 				break;
 		}
 	}

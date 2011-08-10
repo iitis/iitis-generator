@@ -50,6 +50,6 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size);
  * @param srcid        source node
  * @param dstid        destination node
  */
-ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid);
+stats *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid);
 
 #endif

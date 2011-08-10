@@ -66,13 +66,34 @@
 #define HEARTBEAT_PERIOD 1000000
 
 /** Number of samples in link stats averages */
-#define LINK_EWMA_N 10
+#define LINK_AVG_LEN 10
 
 struct mg;
 struct interface;
 struct sniff_pkt;
 struct line;
 struct schedule;
+
+/** Statistics */
+typedef struct stats {
+	thash *db;
+	mmatic *mm;
+} stats;
+
+/** Statistics node */
+struct stats_node {
+	/** node type */
+	enum {
+		STATS_COUNTER = 1,
+		STATS_GAUGE
+	} type;
+
+	/** current value */
+	union {
+		uint32_t counter;
+		int gauge;
+	} as;
+};
 
 /** Scheduler info */
 struct schedule {
@@ -108,8 +129,8 @@ struct line {
 	const char *cmd;                 /** command name */
 	void *prv;                       /** command private data */
 
-	ut *stats;                       /** statistics db */
-	ut *linkstats;                   /** link statistics db */
+	stats *stats;                    /** statistics db */
+	stats *linkstats;                /** link statistics db */
 };
 
 /** Represents network interface */
@@ -120,19 +141,19 @@ struct interface {
 	int fd;                    /** raw interface socket */
 	struct event evread;       /** read event */
 
-	ut *stats;                 /** statistics */
-	thash *linkstats_root;     /** link statistics dbs: "srcid-dstid" -> ut *linkstats */
+	stats *stats;              /** statistics */
+	thash *linkstats_root;     /** link statistics dbs: "srcid-dstid" -> stats *linkstats */
 
 	FILE *dumpfile;            /** dump file */
 };
 
 /** A function which does statistics aggregation
- * @param stats  stats db to export
- * @param arg    arg passed to mgstats_writer_add()
- * @retval true  proceed, write ut to file
- * @retval false dont write ut to file
+ * @param stats  write final stats here
+ * @param arg    argument passed during mgstats_writer_add()
+ * @retval true  proceed, write stats
+ * @retval false dont write stats
  */
-typedef bool (*stats_writer_handler_t)(struct mg *mg, ut *stats, void *arg);
+typedef bool (*stats_writer_handler_t)(struct mg *mg, stats *stats, void *arg);
 
 /** Represents process of aggregation of statistics from many single sources and writing them to a
  * statistics file */
@@ -200,7 +221,7 @@ struct mg {
 	const char *stats_dir;     /** final stats dir path */
 	tlist *stats_writers;      /** tlist of struct stats_writer */
 
-	ut *stats;                 /** global iitis-generator statistics */
+	stats *stats;              /** global iitis-generator statistics */
 };
 
 /** mg frame format */

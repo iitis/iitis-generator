@@ -20,17 +20,15 @@
 #include "stats.h"
 #include "dump.h"
 
-static bool _stats_write_interface(struct mg *mg, ut *dst, void *arg)
+static bool _stats_write_interface(struct mg *mg, stats *dst, void *arg)
 {
-	struct interface *interface = arg;
-
-	mgstats_db_aggregate(dst, interface->stats);
+	stats_aggregate(dst, ((struct interface *) arg)->stats);
 	return true;
 }
 
-static bool _stats_write_link(struct mg *mg, ut *dst, void *arg)
+static bool _stats_write_link(struct mg *mg, stats *dst, void *arg)
 {
-	mgstats_db_aggregate(dst, (ut *) arg);
+	stats_aggregate(dst, (stats *) arg);
 	return true;
 }
 
@@ -118,14 +116,14 @@ int mgi_inject(struct interface *interface,
 	gettimeofday(&t2, NULL);
 
 	timersub(&t2, &t1, &diff);
-	mgstats_db_count_num(interface->stats, "snt_time",
-		diff.tv_sec * 1000000 + diff.tv_usec);
+	stats_countN(interface->stats, "snt_time", diff.tv_sec * 1000000 + diff.tv_usec);
 
 	if (ret < 0) {
-		reterrno(-1, 0, "sendmsg");
+		stats_count(interface->stats, "snt_err");
+		return -1;
 	} else {
-		mgstats_db_count(interface->stats, "snt_ok");
-		mgstats_db_count_num(interface->stats, "snt_ok_bytes",
+		stats_count(interface->stats, "snt_ok");
+		stats_countN(interface->stats, "snt_ok_bytes",
 			iov[1].iov_len + iov[2].iov_len + iov[3].iov_len);
 		return ret;
 	}
@@ -189,15 +187,15 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 	}
 
 	/* send */
-	mgi_inject(interface, &bssid, &dstmac, &srcmac, line->rate,
-		PKT_ETHERTYPE, (void *) pkt, (size_t) size);
+	if (mgi_inject(interface, &bssid, &dstmac, &srcmac, line->rate,
+		PKT_ETHERTYPE, (void *) pkt, (size_t) size) > 0)
+		stats_count(line->stats, "snt_ok");
+	else
+		stats_count(line->stats, "snt_err");
 
 	gettimeofday(&t2, NULL);
 	timersub(&t2, &t1, &diff);
-	mgstats_db_count_num(line->stats, "snt_time",
-		diff.tv_sec * 1000000 + diff.tv_usec);
-
-	mgstats_db_count(line->stats, "snt_ok");
+	stats_countN(line->stats, "snt_time", diff.tv_sec * 1000000 + diff.tv_usec);
 }
 
 static void _mgi_sniff(int fd, short event, void *arg)
@@ -248,19 +246,19 @@ static void _mgi_sniff(int fd, short event, void *arg)
 
 				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_CFP) {
 					pkt.radio.flags.cfp = true;
-					mgstats_db_count(interface->stats, "rcv_cfp");
+					stats_count(interface->stats, "rcv_cfp");
 				}
 				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_SHORTPRE) {
 					pkt.radio.flags.shortpre = true;
-					mgstats_db_count(interface->stats, "rcv_shortpre");
+					stats_count(interface->stats, "rcv_shortpre");
 				}
 				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_FRAG) {
 					pkt.radio.flags.frag = true;
-					mgstats_db_count(interface->stats, "rcv_frag");
+					stats_count(interface->stats, "rcv_frag");
 				}
 				if (pkt.radio.flags.val & IEEE80211_RADIOTAP_F_BADFCS) {
 					pkt.radio.flags.badfcs = true;
-					mgstats_db_count(interface->stats, "rcv_badfcs");
+					stats_count(interface->stats, "rcv_badfcs");
 				}
 				break;
 
@@ -295,8 +293,8 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	if (pkt.radio.tsft == 0)
 		return;
 
-	mgstats_db_count(interface->stats, "rcv_all");
-	mgstats_db_count_num(interface->stats, "rcv_all_bytes", pkt.size);
+	stats_count(interface->stats, "rcv_all");
+	stats_countN(interface->stats, "rcv_all_bytes", pkt.size);
 
 	if (pkt.radio.flags.badfcs) {
 		dbg(9, "skipping bad FCS frame\n");
@@ -311,10 +309,10 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	 */
 	if (pkt.size < PKT_IEEE80211_HDRSIZE) {
 		if (pkt.size == PKT_IEEE80211_ACKSIZE) {
-			mgstats_db_count(interface->stats, "rcv_ack");
+			stats_count(interface->stats, "rcv_ack");
 		} else {
 			dbg(1, "skipping invalid short frame (%d)\n", pkt.size);
-			mgstats_db_count(interface->stats, "rcv_aliens");
+			stats_count(interface->stats, "rcv_aliens");
 		}
 
 		return;
@@ -326,9 +324,9 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	/* skip non-data frames */
 	if (ieee80211_hdr[0] != 0x08) {
 		if (ieee80211_hdr[0] == 0x80) {
-			mgstats_db_count(interface->stats, "rcv_beacons");
+			stats_count(interface->stats, "rcv_beacons");
 		} else {
-			mgstats_db_count(interface->stats, "rcv_nondata");
+			stats_count(interface->stats, "rcv_nondata");
 		}
 
 		return;
@@ -336,7 +334,7 @@ static void _mgi_sniff(int fd, short event, void *arg)
 
 	/* count ieee802.11 data retries */
 	if (ieee80211_hdr[1] & 0x08)
-		mgstats_db_count(interface->stats, "rcv_retry");
+		stats_count(interface->stats, "rcv_retry");
 
 	/* skip invalid BSSID */
 	if (!(ieee80211_hdr[16] == 0x06 &&
@@ -345,21 +343,21 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	      ieee80211_hdr[19] == 0xED &&
 	      ieee80211_hdr[20] == 0xFF)) {
 		dbg(9, "skipping invalid bssid frame\n");
-		mgstats_db_count(interface->stats, "rcv_wrong_bssid");
+		stats_count(interface->stats, "rcv_wrong_bssid");
 		return;
 	}
 
 	/* skip cross-channel transmissions */
 	if (!(ieee80211_hdr[21] == interface->num)) {
 		dbg(9, "skipping cross-channel frame\n");
-		mgstats_db_count(interface->stats, "rcv_wrong_channel");
+		stats_count(interface->stats, "rcv_wrong_channel");
 		return;
 	}
 
 	/* drop frames not destined to us */
 	if (pkt.dstid != interface->mg->options.myid) {
 		dbg(9, "skipping not ours frame (%d)\n", pkt.dstid);
-		mgstats_db_count(interface->stats, "rcv_wrong_dst");
+		stats_count(interface->stats, "rcv_wrong_dst");
 		return;
 	}
 
@@ -368,7 +366,7 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	 */
 	if (pkt.size < PKT_HEADERS_SIZE + PKT_IEEE80211_FCSSIZE + sizeof *mg_hdr) {
 		dbg(11, "skipping short alien frame\n");
-		mgstats_db_count(interface->stats, "rcv_aliens");
+		stats_count(interface->stats, "rcv_aliens");
 		return;
 	}
 
@@ -383,25 +381,25 @@ static void _mgi_sniff(int fd, short event, void *arg)
 
 	if (pkt.mg_hdr.mg_tag != MG_TAG_V1) {
 		dbg(8, "skipping invalid mg tag alien frame (%x)\n", pkt.mg_hdr.mg_tag);
-		mgstats_db_count(interface->stats, "rcv_aliens");
+		stats_count(interface->stats, "rcv_aliens");
 		return;
 	}
 
 	if (pkt.mg_hdr.line_num >= TRAFFIC_LINE_MAX) {
 		dbg(1, "received too high line number (%d) - alien?\n", pkt.mg_hdr.line_num);
-		mgstats_db_count(interface->stats, "rcv_aliens");
+		stats_count(interface->stats, "rcv_aliens");
 		return;
 	}
 
 	pkt.line = interface->mg->lines[pkt.mg_hdr.line_num];
 	if (!pkt.line) {
 		dbg(1, "received invalid line number (%d) - alien?\n", pkt.mg_hdr.line_num);
-		mgstats_db_count(interface->stats, "rcv_aliens");
+		stats_count(interface->stats, "rcv_aliens");
 		return;
 	}
 
-	mgstats_db_count(interface->stats, "rcv_ok");
-	mgstats_db_count_num(interface->stats, "rcv_ok_bytes", pkt.size);
+	stats_count(interface->stats, "rcv_ok");
+	stats_countN(interface->stats, "rcv_ok_bytes", pkt.size);
 
 	/* store time of last frame destined to us */
 	gettimeofday(&interface->mg->last, NULL);
@@ -410,29 +408,29 @@ static void _mgi_sniff(int fd, short event, void *arg)
 	n  = pkt.mg_hdr.line_ctr;
 	n -= pkt.line->line_ctr_rcv;
 	if (n > 0) {
-		mgstats_db_count(pkt.line->linkstats, "rcv_ok");
-		mgstats_db_count_num(pkt.line->linkstats, "rcv_ok_bytes", pkt.size);
+		stats_count(pkt.line->linkstats, "rcv_ok");
+		stats_countN(pkt.line->linkstats, "rcv_ok_bytes", pkt.size);
 
-		mgstats_db_count(pkt.line->stats, "rcv_ok");
-		mgstats_db_count_num(pkt.line->stats, "rcv_ok_bytes", pkt.size);
+		stats_count(pkt.line->stats, "rcv_ok");
+		stats_countN(pkt.line->stats, "rcv_ok_bytes", pkt.size);
 
 		if (n > 1) {
-			mgstats_db_count_num(pkt.line->linkstats, "rcv_lost", n - 1);
-			mgstats_db_count_num(pkt.line->stats, "rcv_lost", n - 1);
+			stats_countN(pkt.line->linkstats, "rcv_lost", n - 1);
+			stats_countN(pkt.line->stats, "rcv_lost", n - 1);
 		}
 	} else {
 		pkt.dupe = 1;
 
-		mgstats_db_count(pkt.line->linkstats, "rcv_dup");
-		mgstats_db_count_num(pkt.line->linkstats, "rcv_dup_bytes", pkt.size);
+		stats_count(pkt.line->linkstats, "rcv_dup");
+		stats_countN(pkt.line->linkstats, "rcv_dup_bytes", pkt.size);
 
-		mgstats_db_count(pkt.line->stats, "rcv_dup");
-		mgstats_db_count_num(pkt.line->stats, "rcv_dup_bytes", pkt.size);
+		stats_count(pkt.line->stats, "rcv_dup");
+		stats_countN(pkt.line->stats, "rcv_dup_bytes", pkt.size);
 	}
 
-	mgstats_db_ewma(pkt.line->linkstats, "rssi", LINK_EWMA_N, pkt.radio.rssi);
-	mgstats_db_ewma(pkt.line->linkstats, "rate", LINK_EWMA_N, pkt.radio.rate / 2.0);
-	mgstats_db_ewma(pkt.line->linkstats, "antnum", LINK_EWMA_N, pkt.radio.antnum);
+	stats_set(pkt.line->linkstats, "rssi", pkt.radio.rssi);
+	stats_set(pkt.line->linkstats, "rate", pkt.radio.rate / 2);
+	stats_set(pkt.line->linkstats, "antnum", pkt.radio.antnum);
 
 	pkt.payload = (uint8_t *) mg_hdr + sizeof *mg_hdr;
 	pkt.paylen  = pkt.size - PKT_HEADERS_SIZE - PKT_IEEE80211_FCSSIZE;
@@ -479,7 +477,7 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 		mg->interface[i].name = mmatic_strdup(mg->mm, name);
 		mg->interface[i].num = i;
 		mg->interface[i].fd = fd;
-		mg->interface[i].stats = mgstats_db_create(mg);
+		mg->interface[i].stats = stats_create(mg->mm);
 		mg->interface[i].linkstats_root = thash_create_strkey(NULL, mg->mm);
 
 		/* monitor for incoming packets */
@@ -493,6 +491,7 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 			name, "interface.txt",
 			"snt_ok",
 			"snt_ok_bytes",
+			"snt_err",
 			"snt_time",
 
 			"rcv_all",
@@ -518,9 +517,9 @@ int mgi_init(struct mg *mg, mgi_packet_cb cb)
 	return count;
 }
 
-ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid)
+stats *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid)
 {
-	ut *stats;
+	stats *stats;
 	char key[64], filename[64];
 
 	if (dstid != interface->mg->options.myid)
@@ -530,7 +529,7 @@ ut *mgi_linkstats_get(struct interface *interface, uint8_t srcid, uint8_t dstid)
 	stats = thash_get(interface->linkstats_root, key);
 
 	if (!stats) {
-		stats = ut_new_utthash(NULL, interface->mg->mm);
+		stats = stats_create(interface->mg->mm);
 		thash_set(interface->linkstats_root, key, stats);
 
 		snprintf(filename, sizeof filename, "link-%u->%u.txt", srcid, dstid);

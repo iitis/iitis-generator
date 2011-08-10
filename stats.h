@@ -27,29 +27,32 @@ void mgstats_writer_add(struct mg *mg,
 	stats_writer_handler_t handler, void *arg,
 	const char *dir, const char *file, ...);
 
-/** Initialize a stats database */
-ut *mgstats_db_create(struct mg *mg);
+/*****/
+
+/** Initialize a stats database
+ * @param mm     target memory
+ */
+stats *stats_create(mmatic *mm);
 
 /** Increase counter
  * @param name   stat name
  * @param num    increase amount
  */
-void mgstats_db_count_num(ut *ut, const char *name, uint32_t num);
+void stats_countN(stats *stats, const char *name, uint32_t num);
 
 /** Increase counter by 1 */
-#define mgstats_db_count(ut, name) mgstats_db_count_num(ut, name, 1)
+#define stats_count(ut, name) stats_countN(ut, name, 1)
 
-/** Update EWMA level
+/** Set gauge level
  * @param name   stat name
- * @param n      number of samples (affects EWMA smoothing factor)
  * @param val    new value
  */
-void mgstats_db_ewma(ut *ut, const char *name, uint32_t n, double val);
+void stats_set(stats *stats, const char *name, int val);
 
 /** Aggregate statistics
  * @param src    source stats db, after call counters will be zeroed
  * @param dst    already existing, destination stats db
  */
-void mgstats_db_aggregate(ut *dst, ut *src);
+void stats_aggregate(stats *dst, stats *src);
 
 #endif

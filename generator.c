@@ -387,7 +387,7 @@ static int parse_traffic(struct mg *mg)
 		}
 
 		/* stats */
-		line->stats = mgstats_db_create(mg);
+		line->stats = stats_create(mg->mm);
 		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
 
 		/* prepare (may contain further line parsing) */
@@ -463,7 +463,7 @@ static void handle_packet(struct sniff_pkt *pkt)
 }
 
 /** Aggregate stats from all lines */
-static bool _stats_aggregate_lines(struct mg *mg, ut *ut, void *arg)
+static bool _stats_aggregate_lines(struct mg *mg, stats *stats, void *arg)
 {
 	int i;
 
@@ -471,23 +471,23 @@ static bool _stats_aggregate_lines(struct mg *mg, ut *ut, void *arg)
 		if (!mg->lines[i])
 			continue;
 
-		mgstats_db_aggregate(ut, mg->lines[i]->stats);
+		stats_aggregate(stats, mg->lines[i]->stats);
 	}
 
 	return true;
 }
 
 /** Global stats */
-static bool _stats_global(struct mg *mg, ut *ut, void *arg)
+static bool _stats_global(struct mg *mg, stats *stats, void *arg)
 {
-	mgstats_db_aggregate(ut, mg->stats);
+	stats_aggregate(stats, mg->stats);
 	return true;
 }
 
 /** Initialize global stats stuff */
 static void _stats_init(struct mg *mg)
 {
-	mg->stats = mgstats_db_create(mg);
+	mg->stats = stats_create(mg->mm);
 
 	/* iitis-generator internal stats */
 	mgstats_writer_add(mg,
@@ -503,6 +503,7 @@ static void _stats_init(struct mg *mg)
 		NULL, "linestats.txt",
 		"snt_ok",
 		"snt_time",
+		"snt_err",
 		"rcv_ok",
 		"rcv_ok_bytes",
 		"rcv_dup",

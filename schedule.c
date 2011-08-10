@@ -11,7 +11,7 @@ void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 {
 	struct timeval now, wanted, tv;
 
-	mgstats_db_count(sch->mg->stats, "scheduler_evt");
+	stats_count(sch->mg->stats, "scheduler_evt");
 
 	/* first "last run" is at the origin */
 	if (sch->last.tv_sec == 0) {
@@ -27,7 +27,7 @@ void mgs_schedule(struct schedule *sch, struct timeval *timeout)
 
 	if (timercmp(&now, &wanted, >)) {
 		timerclear(&tv);
-		mgstats_db_count(sch->mg->stats, "scheduler_lag");
+		stats_count(sch->mg->stats, "scheduler_lag");
 	} else {
 		timersub(&wanted, &now, &tv);
 	}
