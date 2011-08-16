@@ -12,6 +12,7 @@ struct cmd_packet {
 	uint16_t len;         /** frame length */
 	uint32_t num;         /** number of repetitions left */
 	uint32_t T;           /** time interval between repetitions */
+	uint32_t each;        /** number of frames to send in one repetition */
 
 	uint32_t last_ctr;    /** last ctr value */
 };

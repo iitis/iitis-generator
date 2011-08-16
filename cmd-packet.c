@@ -20,6 +20,7 @@ int cmd_packet_init(struct line *line)
 	cp->len = 100;
 	cp->num = 1;
 	cp->T = 1000;
+	cp->each = 1;
 
 	for (i = 1; i < line->argc; i++) {
 		switch (i) {
@@ -39,6 +40,9 @@ int cmd_packet_init(struct line *line)
 			case 3:
 				cp->T = atoi(line->argv[3]) * 1000;
 				break;
+			case 4:
+				cp->each = atoi(line->argv[4]);
+				break;
 		}
 	}
 
@@ -53,9 +57,11 @@ void cmd_packet_out(int fd, short evtype, void *arg)
 {
 	struct line *line = arg;
 	struct cmd_packet *cp = line->prv;
+	uint32_t i;
 
 	/* send ASAP */
-	mgi_send(line, NULL, 0, cp->len);
+	for (i = 0; i < cp->each; i++)
+		mgi_send(line, NULL, 0, cp->len);
 
 	/* reschedule */
 	if (cp->num-- > 1)

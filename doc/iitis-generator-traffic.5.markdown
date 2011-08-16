@@ -82,7 +82,7 @@ line specification, before the command part.
 Currently, only one command is supported - `packet` - which sends a simple frame, optionally
 repeated with a fixed time period. Command syntax:
 
-  *packet* [*len* [*num* [*T*]]]
+  *packet* [*len* [*num* [*T* [*burst*]]]]
 
 `1.` `len`: frame length, default 100B (integer 100-1500)
 
@@ -95,6 +95,8 @@ and repeated until frame is full.
 `3.` `T`: repetition period, default 1000ms (integer 1+)
 
 If `num` is greater than 1, this defines the time gap between frame repetitions.
+
+`4.` `burst`: number of frames to send in a burst for each repetition, default 1 (integer 1+)
 
 ## AUTHOR AND COPYRIGHT INFO
 
