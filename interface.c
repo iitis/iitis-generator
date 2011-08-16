@@ -42,8 +42,6 @@ int mgi_inject(struct interface *interface,
 	int ret;
 	struct timeval t1, t2, diff;
 
-	dbg(15, "interface=%d len=%d\n", interface->num, len);
-
 	/* radiotap header
 	 * NOTE: this is always LSB!
 	 * SEE: Documentation/networking/mac80211-injection.txt
@@ -124,7 +122,7 @@ int mgi_inject(struct interface *interface,
 	} else {
 		stats_count(interface->stats, "snt_ok");
 		stats_countN(interface->stats, "snt_ok_bytes",
-			iov[1].iov_len + iov[2].iov_len + iov[3].iov_len);
+			iov[1].iov_len + iov[2].iov_len + iov[3].iov_len + PKT_IEEE80211_FCSSIZE);
 		return ret;
 	}
 }
@@ -161,12 +159,10 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 		dstmac.ether_addr_octet[0] |= 0x01;
 
 	/* fill the header */
-	gettimeofday(&timestamp, NULL);
-
 	mg_hdr = (void *) pkt;
 	mg_hdr->mg_tag   = htonl(MG_TAG_V1);
-	mg_hdr->time_s   = htonl(timestamp.tv_sec);
-	mg_hdr->time_us  = htonl(timestamp.tv_usec);
+	mg_hdr->time_s   = htonl(t1.tv_sec);
+	mg_hdr->time_us  = htonl(t1.tv_usec);
 	mg_hdr->line_num = htonl(line->line_num);
 	mg_hdr->line_ctr = htonl(++line->line_ctr);
 
@@ -428,9 +424,9 @@ static void _mgi_sniff(int fd, short event, void *arg)
 		stats_countN(pkt.line->stats, "rcv_dup_bytes", pkt.size);
 	}
 
-	stats_set(pkt.line->linkstats, "rssi", pkt.radio.rssi);
-	stats_set(pkt.line->linkstats, "rate", pkt.radio.rate / 2);
-	stats_set(pkt.line->linkstats, "antnum", pkt.radio.antnum);
+	stats_mean(pkt.line->linkstats, "rssi", pkt.radio.rssi);
+	stats_mean(pkt.line->linkstats, "rate", pkt.radio.rate / 2);
+	stats_mean(pkt.line->linkstats, "antnum", pkt.radio.antnum);
 
 	pkt.payload = (uint8_t *) mg_hdr + sizeof *mg_hdr;
 	pkt.paylen  = pkt.size - PKT_HEADERS_SIZE - PKT_IEEE80211_FCSSIZE;

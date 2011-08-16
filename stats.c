@@ -72,10 +72,14 @@ static void _stats_write(struct mg *mg, struct stats_writer *sa, stats *stats)
 					snprintf(buf, sizeof buf, " %u", n->as.counter);
 					break;
 				case STATS_GAUGE:
-					snprintf(buf, sizeof buf, " %d", n->as.gauge);
+					if (n->as.gauge % 100 >= 50)
+						snprintf(buf, sizeof buf, " %d", n->as.gauge / 100 + 1);
+					else
+						snprintf(buf, sizeof buf, " %d", n->as.gauge / 100);
 					break;
 				default:
-					dbg(1, "unknown type of stat: %s\n", key);
+					dbg(1, "unknown type %d of stat: %s\n", n->type, key);
+					snprintf(buf, sizeof buf, " ?");
 					break;
 			}
 		}
@@ -236,9 +240,10 @@ void stats_countN(stats *stats, const char *name, uint32_t num)
 	}
 }
 
-void stats_set(stats *stats, const char *name, int val)
+void stats_mean(stats *stats, const char *name, int val)
 {
 	struct stats_node *n;
+	int mean;
 
 	pjf_assert(stats);
 
@@ -247,9 +252,11 @@ void stats_set(stats *stats, const char *name, int val)
 		n = mmatic_zalloc(stats->mm, sizeof *n);
 		n->type = STATS_GAUGE;
 		thash_set(stats->db, name, n);
-	}
 
-	n->as.gauge = val;
+		n->as.gauge = val * 100;
+	} else {
+		n->as.gauge = (n->as.gauge + val * 100) / 2;
+	}
 }
 
 void stats_aggregate(stats *dst_stats, stats *src_stats)
@@ -261,7 +268,12 @@ void stats_aggregate(stats *dst_stats, stats *src_stats)
 		dst = thash_get(dst_stats->db, key);
 		if (!dst) {
 			dst = mmatic_zalloc(dst_stats->mm, sizeof *dst);
+			dst->type = src->type;
 			thash_set(dst_stats->db, key, dst);
+
+			/* needed for accurate values @1 */
+			if (src->type == STATS_GAUGE)
+				dst->as.gauge = src->as.gauge;
 		}
 
 		switch (src->type) {
@@ -271,8 +283,8 @@ void stats_aggregate(stats *dst_stats, stats *src_stats)
 				src->as.counter = 0;
 				break;
 			case STATS_GAUGE:
-				/* last */
-				dst->as.gauge = src->as.gauge;
+				/* @1: mean value */
+				dst->as.gauge = (dst->as.gauge + src->as.gauge) / 2;
 				break;
 			default:
 				die("unknown type for stat '%s'\n", key);

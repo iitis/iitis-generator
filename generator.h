@@ -91,7 +91,7 @@ struct stats_node {
 	/** current value */
 	union {
 		uint32_t counter;
-		int gauge;
+		int gauge;                   /** real value x 100 */
 	} as;
 };
 

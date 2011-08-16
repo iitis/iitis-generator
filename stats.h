@@ -45,9 +45,9 @@ void stats_countN(stats *stats, const char *name, uint32_t num);
 
 /** Set gauge level
  * @param name   stat name
- * @param val    new value
+ * @param val    new value for mean
  */
-void stats_set(stats *stats, const char *name, int val);
+void stats_mean(stats *stats, const char *name, int val);
 
 /** Aggregate statistics
  * @param src    source stats db, after call counters will be zeroed
