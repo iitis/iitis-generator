@@ -23,7 +23,7 @@ traffic generator. The file is common for the whole network. Exemplary few lines
 	3.75 0  4 7   0 0 packet 200 30
 	
 	# on time 10.0s, send final, big 7->4 frame with bitrate 54Mbps and no ACK
-	10.0 0  7 4  54 1 packet 1 1500
+	10.0 0  7 4  54 1 packet 1500
 
 Comments start with a hash (#). Generator lines follow the same syntax:
 
@@ -82,7 +82,7 @@ line specification, before the command part.
 Currently, only one command is supported - `packet` - which sends a simple frame, optionally
 repeated with a fixed time period. Command syntax:
 
-  *packet* [*len* [*num* [*T* [*burst*]]]]
+  *packet* [*len* [*rep* [*T* [*burst*]]]]
 
 `1.` `len`: frame length, default 100B (integer 100-1500)
 
@@ -90,11 +90,11 @@ This defines the total frame length in the air, ie. it includes the IEEE 802.11,
 iitis-generator headers. If there is a remaining space, frame payload is filled with line definition,
 and repeated until frame is full.
 
-`2.` `num`: number of repetitions, default 1 (integer 1+)
+`2.` `rep`: number of repetitions, default 1 (integer 1+)
 
 `3.` `T`: repetition period, default 1000ms (integer 1+)
 
-If `num` is greater than 1, this defines the time gap between frame repetitions.
+If `rep` is greater than 1, this defines the time gap between frame repetitions.
 
 `4.` `burst`: number of frames to send in a burst for each repetition, default 1 (integer 1+)
 
