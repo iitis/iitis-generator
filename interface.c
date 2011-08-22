@@ -131,7 +131,6 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 {
 	uint8_t pkt[PKT_BUFSIZE];
 	struct mg_hdr *mg_hdr;
-	struct timeval timestamp;
 	struct interface *interface = line->interface;
 	int i, j, k;
 	struct timeval t1, t2, diff;

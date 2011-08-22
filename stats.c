@@ -243,7 +243,6 @@ void stats_countN(stats *stats, const char *name, uint32_t num)
 void stats_mean(stats *stats, const char *name, int val)
 {
 	struct stats_node *n;
-	int mean;
 
 	pjf_assert(stats);
 
