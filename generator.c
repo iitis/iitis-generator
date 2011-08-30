@@ -14,6 +14,7 @@
 #include "schedule.h"
 #include "sync.h"
 #include "stats.h"
+#include "parser.h"
 
 /** Reverse bits (http://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable) */
 const uint8_t REVERSE[256] =
@@ -270,16 +271,20 @@ static int parse_config(struct mg *mg)
 static int parse_traffic(struct mg *mg)
 {
 	FILE *fp;
+	char *file;
 	char buf[BUFSIZ];
 	uint32_t line_num = 0;
-	int i, j, token, rc;
 	struct line *line;
-	double halfrate;
+	int i, rc;
+	char *rest, *errmsg;
+	struct mgp_line *pl;
+	char *s;
 
-	void (*handle)(int, short, void *);
+	void (*handler)(int, short, void *);
 	int (*initialize)(struct line *line);
 
-	fp = fopen(mg->options.traf_file, "r");
+	file = mg->options.traf_file;
+	fp = fopen(file, "r");
 	if (!fp) {
 		reterrno(1, 0, "could not open traffic file");
 	}
@@ -289,109 +294,87 @@ static int parse_traffic(struct mg *mg)
 		if (line_num >= N(mg->lines))
 			die("Too many lines in the traffic file");
 
+		/* skip comments */
 		if (buf[0] == '#' || buf[0] == '\r' || buf[0] == '\n')
 			continue;
 
+		/* parse line */
+		pl = mgp_parse_line(mg->mm, buf, 7, &rest, &errmsg,
+			"time", "intnum", "src", "dst", "rate", "noack", "cmd", NULL);
+		if (!pl) {
+			dbg(0, "%s: line %d: parse error: %s\n", file, line_num, errmsg);
+			return 1;
+		}
+
+		/* rewrite into proper locations */
 		line = mmatic_zalloc(mg->mm, sizeof *line);
 		line->mg = mg;
 		line->line_num = line_num;
 		line->contents = mmatic_strdup(mg->mm, buf);
 		mg->lines[line_num] = line;
 
-		i = j = token = 0;
-		do {
-			if (buf[j] == '\0' || buf[j] == ' ' || buf[j] == '\r' || buf[j] == '\n') {
-				token++;
-
-				if (buf[j])
-					buf[j++] = '\0';
-
-				/* FORMAT: time interface_num src dst rate noack? command params... */
-				switch (token) {
-					case 1:
-						line->tv.tv_sec = atoi(buf+i);
-
-						for (; i < j; i++) {
-							if (buf[i] == '.') {
-								line->tv.tv_usec = atoi(buf + i + 1) * 1000;
-								break;
-							}
-						}
-						break;
-					case 2:
-						rc = atoi(buf+i);
-						if (rc >= IFINDEX_MAX) {
-							dbg(0, "%s: line %d: too big interface number: %d\n",
-								mg->options.traf_file, line->line_num, rc);
-							return 1;
-						}
-
-						line->interface = &mg->interface[rc];
-						if (line->interface->fd <= 0) {
-							dbg(0, "%s: line %d: interface not opened: %d\n",
-								mg->options.traf_file, line->line_num, rc);
-							return 2;
-						}
-						break;
-					case 3:
-						line->srcid = atoi(buf+i);
-						break;
-					case 4:
-						line->dstid = atoi(buf+i);
-						break;
-					case 5:
-						halfrate = strtod(buf+i, NULL);
-						line->rate = halfrate * 2; /* NB: "auto" => 0 */
-						break;
-					case 6:
-						line->noack = atoi(buf+i);
-						break;
-					case 7:
-						line->cmd = mmatic_strdup(mg->mm, buf+i);
-						/* NB: fall-through */
-					default:
-						if (line->argc == LINE_ARGS_MAX - 1) {
-							dbg(0, "%s: line %d: too many line arguments: %d\n",
-								mg->options.traf_file, line_num, line->argc);
-							return 2;
-						}
-
-						line->argv[line->argc++] = mmatic_strdup(mg->mm, buf+i);
-						break;
-				}
-
-				while (buf[j] == ' ')
-					j++;
-
-				i = j;
-			} else {
-				j++;
+		/* time */
+		line->tv.tv_sec = mgp_get_int(pl, "time");
+		s = mgp_get_string(pl, "time");
+		for (i = 0; s[i]; i++) {
+			if (s[i] == '.') {
+				line->tv.tv_usec = atoi(s + i + 1) * 1000;
+				break;
 			}
-		} while(buf[j]);
+		}
 
-		line->argv[line->argc] = NULL;
-
-		if (!line->cmd)
-			continue;
-
-		/* choose handler for command
-		 * in future?: change to dynamic loader and dlsym() */
-		if (streq(line->cmd, "packet")) {
-			/* TODO assign incoming packet handler too */
-			handle = cmd_packet_out;
-			initialize = cmd_packet_init;
-		} else {
-			dbg(0, "%s: line %d: invalid command: %s\n",
-				mg->options.traf_file, line->line_num, line->cmd);
+		/* interface */
+		i = mgp_get_string(pl, "intnum");
+		if (i >= IFINDEX_MAX) {
+			dbg(0, "%s: line %d: too big interface number: %d\n", file, line_num, i);
+			return 1;
+		}
+		line->interface = &mg->interface[i];
+		if (line->interface->fd <= 0) {
+			dbg(0, "%s: line %d: interface not opened: %d\n", file, line_num, i);
 			return 2;
 		}
+
+		/* src/dst */
+		line->srcid = mgp_get_int(pl, "src");
+		line->dstid = mgp_get_int(pl, "dst");
+
+		/* rate/noack */
+		line->rate = mgp_get_float(pl, "rate") * 2; /* NB: "auto" => 0 */
+		line->noack = mgp_get_int(pl, "noack");
+
+		/* command */
+		line->cmd = mgp_get_string(pl, "cmd");
+		if (!line->cmd) {
+			dbg(0, "%s: line %d: no line command\n", file, line_num);
+			return 2;
+		}
+
+		/* choose handler for command
+		 * TODO: change to dynamic loader and dlsym() */
+		if (streq(line->cmd, "packet")) {
+			/* TODO assign incoming packet handler too? */
+			handler = cmd_packet_out;
+			initialize = cmd_packet_init;
+		} else {
+			dbg(0, "%s: line %d: invalid command: %s\n", file, line_num, line->cmd);
+			return 2;
+		}
+
+/*
+						line->argv[line->argc++] = mmatic_strdup(mg->mm, buf+i);
+		line->argv[line->argc] = NULL;
+*/
 
 		/* stats */
 		line->stats = stats_create(mg->mm);
 		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
 
-		/* prepare (may contain further line parsing) */
-		mgs_setup(&line->schedule, mg, handle, line);
+		/* initialize line scheduler */
+		mgs_setup(&line->schedule, mg, handler, line);
+
+		/* call line command initializer */
+		/* TODO: finish */
 		rc = initialize(line);
 		if (rc != 0)
 			return rc;

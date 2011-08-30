@@ -1,8 +1,8 @@
 CFLAGS = -Ilib/
-LDFLAGS = -lpjf -lpcre -levent lib/radiotap.o
+LDFLAGS = -export-dynamic -lpjf -lpcre -levent lib/radiotap.o
 
 ME=iitis-generator
-C_OBJECTS=interface.o generator.o cmd-packet.o schedule.o sync.o stats.o dump.o
+C_OBJECTS=interface.o generator.o cmd-packet.o schedule.o sync.o stats.o dump.o parser.o fun.o
 TARGETS=iitis-generator
 
 include rules.mk
