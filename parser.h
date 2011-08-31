@@ -5,15 +5,15 @@
 
 /** Representation of a parsed traffic file line */
 struct mgp_line {
+	mmatic *mm;
 	thash *args;         /**< arguments: thash of arg name -> struct mgp_arg */
 };
 
 /** Argument value */
 struct mgp_arg {
-	mmatic *mm;
 	const char *name;                  /**< argument name */
 
-	const char *as_string;             /**< value as string */
+	char *as_string;                   /**< value as string */
 	int as_int;                        /**< value as integer */
 	float as_float;                    /**< value as float */
 
@@ -43,19 +43,20 @@ struct mgp_line *mgp_parse_line(
 	...                  /**< [in] optional mapping of argc->name, end with NULL */
 );
 
-/** Get argument value as int
- * @note supports underlying functions
- * @retval 0 if given argument was not found */
-int mgp_get_int(struct mgp_line *l, const char *name);
 
-/** Get argument value as string
- * @note does not support struct mgp_arg.isfunc
- * @retval 0 if given argument was not found */
-const char *mgp_get_string(struct mgp_line *l, const char *name);
+/** Fetch argument as integer
+ * @param defval   set value to defval if argument not specified */
+struct mgp_arg *mgp_fetch_int(struct mgp_line *l, const char *name, int defval);
 
-/** Get argument value as float
- * @note does not support struct mgp_arg.isfunc
- * @retval 0 if given argument was not found */
-float mgp_get_float(struct mgp_line *l, const char *name);
+/** Fetch argument as string
+ * @param defval   use a strdup of defval if argument not specified */
+struct mgp_arg *mgp_fetch_string(struct mgp_line *l, const char *name, const char *defval);
+
+/** Fetch argument as float value */
+struct mgp_arg *mgp_fetch_float(struct mgp_line *l, const char *name, float defval);
+
+#define mgp_int(arg)    (arg->isfunc ? arg->fptr(arg) : arg->as_int)
+#define mgp_string(arg) (arg->as_string)
+#define mgp_float(arg)  (arg->as_float)
 
 #endif

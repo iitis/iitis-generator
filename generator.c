@@ -6,6 +6,7 @@
 #include <getopt.h>
 #include <event.h>
 #include <unistd.h>
+#include <dlfcn.h>
 #include <libpjf/main.h>
 
 #include "generator.h"
@@ -263,6 +264,54 @@ static int parse_config(struct mg *mg)
 	return (parse_config_ut(mg, cfg) ? 2 : 0);
 }
 
+/** Update given struct line with callback function addresses
+ * @retval true success */
+static bool find_line_cmd(struct line *line)
+{
+	static void *me = NULL;
+	static char buf[128];
+
+	/* a trick for conversion void* -> function address */
+	static union {
+		void *ptr;
+		int (*fun_init)(struct line *, const char *);
+		void (*fun_out)(int, short, void *);
+		void (*fun_in)(struct sniff_pkt *);
+	} ptr2func;
+
+	if (!me)
+		me = dlopen(NULL, RTLD_NOW | RTLD_GLOBAL);
+
+	/* initializer */
+	snprintf(buf, sizeof buf, "cmd_%s_init", line->cmd);
+	ptr2func.ptr = dlsym(me, buf);
+
+	if (!ptr2func.ptr)
+		return false;
+	else
+		line->cmd_init = ptr2func.fun_init;
+
+	/* outgoing frames */
+	snprintf(buf, sizeof buf, "cmd_%s_out", line->cmd);
+	ptr2func.ptr = dlsym(me, buf);
+
+	if (!ptr2func.ptr)
+		return false;
+	else
+		line->cmd_out = ptr2func.fun_out;
+
+	/* incoming frames */
+	snprintf(buf, sizeof buf, "cmd_%s_in", line->cmd);
+	ptr2func.ptr = dlsym(me, buf);
+
+	if (!ptr2func.ptr)
+		return false;
+	else
+		line->cmd_in = ptr2func.fun_in;
+
+	return true;
+}
+
 /** Parse traffic file
  * @retval 0 success
  * @retval 1 syntax error
@@ -271,17 +320,15 @@ static int parse_config(struct mg *mg)
 static int parse_traffic(struct mg *mg)
 {
 	FILE *fp;
-	char *file;
+	const char *file;
 	char buf[BUFSIZ];
 	uint32_t line_num = 0;
 	struct line *line;
 	int i, rc;
 	char *rest, *errmsg;
 	struct mgp_line *pl;
+	struct mgp_arg *arg;
 	char *s;
-
-	void (*handler)(int, short, void *);
-	int (*initialize)(struct line *line);
 
 	file = mg->options.traf_file;
 	fp = fopen(file, "r");
@@ -306,16 +353,19 @@ static int parse_traffic(struct mg *mg)
 			return 1;
 		}
 
-		/* rewrite into proper locations */
+		/* ...and rewrite into struct line */
 		line = mmatic_zalloc(mg->mm, sizeof *line);
+		mg->lines[line_num] = line;
+
 		line->mg = mg;
 		line->line_num = line_num;
 		line->contents = mmatic_strdup(mg->mm, buf);
-		mg->lines[line_num] = line;
+		line->stats = stats_create(mg->mm);
 
 		/* time */
-		line->tv.tv_sec = mgp_get_int(pl, "time");
-		s = mgp_get_string(pl, "time");
+		arg = mgp_fetch_string(pl, "time", 0);
+		s = mgp_string(arg);
+		line->tv.tv_sec = atoi(s);
 		for (i = 0; s[i]; i++) {
 			if (s[i] == '.') {
 				line->tv.tv_usec = atoi(s + i + 1) * 1000;
@@ -324,7 +374,8 @@ static int parse_traffic(struct mg *mg)
 		}
 
 		/* interface */
-		i = mgp_get_string(pl, "intnum");
+		arg = mgp_fetch_int(pl, "intnum", 0);
+		i = mgp_int(arg);
 		if (i >= IFINDEX_MAX) {
 			dbg(0, "%s: line %d: too big interface number: %d\n", file, line_num, i);
 			return 1;
@@ -336,46 +387,42 @@ static int parse_traffic(struct mg *mg)
 		}
 
 		/* src/dst */
-		line->srcid = mgp_get_int(pl, "src");
-		line->dstid = mgp_get_int(pl, "dst");
+		arg = mgp_fetch_int(pl, "src", 1);
+		line->srcid = mgp_int(arg);
+
+		arg = mgp_fetch_int(pl, "dst", 1);
+		line->dstid = mgp_int(arg);
+
+		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
 
 		/* rate/noack */
-		line->rate = mgp_get_float(pl, "rate") * 2; /* NB: "auto" => 0 */
-		line->noack = mgp_get_int(pl, "noack");
+		arg = mgp_fetch_float(pl, "rate", 0);  /* NB: "auto" => 0 */
+		line->rate = mgp_float(arg) * 2;       /* driver uses "half-rates" */
 
-		/* command */
-		line->cmd = mgp_get_string(pl, "cmd");
+		arg = mgp_fetch_int(pl, "noack", 0);
+		line->noack = mgp_int(arg);
+
+		/*
+		 * command
+		 */
+		arg = mgp_fetch_string(pl, "cmd", "");
+		line->cmd = mgp_string(arg);
 		if (!line->cmd) {
 			dbg(0, "%s: line %d: no line command\n", file, line_num);
 			return 2;
 		}
 
-		/* choose handler for command
-		 * TODO: change to dynamic loader and dlsym() */
-		if (streq(line->cmd, "packet")) {
-			/* TODO assign incoming packet handler too? */
-			handler = cmd_packet_out;
-			initialize = cmd_packet_init;
-		} else {
+		/* find command handlers */
+		if (!find_line_cmd(line)) {
 			dbg(0, "%s: line %d: invalid command: %s\n", file, line_num, line->cmd);
 			return 2;
 		}
 
-/*
-						line->argv[line->argc++] = mmatic_strdup(mg->mm, buf+i);
-		line->argv[line->argc] = NULL;
-*/
+		/* initialize scheduler of outgoing frames */
+		mgs_setup(&line->schedule, mg, line->cmd_out, line);
 
-		/* stats */
-		line->stats = stats_create(mg->mm);
-		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
-
-		/* initialize line scheduler */
-		mgs_setup(&line->schedule, mg, handler, line);
-
-		/* call line command initializer */
-		/* TODO: finish */
-		rc = initialize(line);
+		/* call command initializer */
+		rc = line->cmd_init(line, rest);
 		if (rc != 0)
 			return rc;
 	}
@@ -436,11 +483,9 @@ static void sync_init(struct mg *mg)
 /** Pass incoming packet to proper handler */
 static void handle_packet(struct sniff_pkt *pkt)
 {
-	/* TODO: stats (remember to drop duplicates) */
+	/* TODO: stats? (remember to drop duplicates) */
 
-	if (streq(pkt->line->cmd, "packet")) {
-		cmd_packet_in(pkt);
-	}
+	pkt->line->cmd_in(pkt);
 
 	return;
 }

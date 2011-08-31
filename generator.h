@@ -91,60 +91,73 @@ struct stats_node {
 	/** current value */
 	union {
 		uint32_t counter;
-		int gauge;                   /** real value x 100 */
+		int gauge;                   /**< real value x 100 */
 	} as;
 };
 
 /** Scheduler info */
 struct schedule {
-	struct mg *mg;                   /** root */
+	struct mg *mg;                   /**< root */
 
-	struct event ev;                 /** libevent handle */
-	struct timeval last;             /** absolute time of last run */
+	struct event ev;                 /**< libevent handle */
+	struct timeval last;             /**< absolute time of last run */
 
-	void (*cb)(int, short, void *);  /** timer callback */
-	void *arg;                       /** timer callback argument */
+	void (*cb)(int, short, void *);  /**< timer callback */
+	void *arg;                       /**< timer callback argument */
 };
 
 /** Traffic file line */
 struct line {
-	struct mg *mg;                   /** root */
-	struct schedule schedule;        /** scheduler info */
+	struct mg *mg;                   /**< root */
+	struct schedule schedule;        /**< scheduler info */
 
-	uint32_t line_num;               /** line number in traffic file */
-	uint32_t line_ctr;               /** line counter for sending */
-	uint32_t line_ctr_rcv;           /** line counter for receiving */
+	uint32_t line_num;               /**< line number in traffic file */
+	uint32_t line_ctr;               /**< line counter for sending */
+	uint32_t line_ctr_rcv;           /**< line counter for receiving */
 
-	const char *contents;            /** line contents */
-	struct timeval tv;               /** time of first packet (time anchor) */
-	struct interface *interface;     /** interface number */
-	uint8_t srcid;                   /** src id */
-	uint8_t dstid;                   /** dst id */
-	uint8_t rate;                    /** bitrate [in 0.5Mbps] or 0 for "auto" */
-	bool    noack;                   /** no ACK? */
+	const char *contents;            /**< line contents */
+	struct timeval tv;               /**< time of first packet (time anchor) */
+	struct interface *interface;     /**< interface number */
+	uint8_t srcid;                   /**< src id */
+	uint8_t dstid;                   /**< dst id */
+	uint8_t rate;                    /**< bitrate [in 0.5Mbps] or 0 for "auto" */
+	bool    noack;                   /**< no ACK? */
+	const char *cmd;                 /**< command name */
 
-	int argc;                        /** length of argv */
-	const char *argv[LINE_ARGS_MAX]; /** arguments, argv[0] is command */
+	/** Handle command initialization
+	 * @param line   the already initialized parts of struct line
+	 * @param text   rest of a traffic file line that defines command params
+	 * @retval 0     success
+	 * @retval 1     syntax error
+	 * @retval 2     logic error */
+	int (*cmd_init)(struct line *line, const char *text);
 
-	const char *cmd;                 /** command name */
-	void *prv;                       /** command private data */
+	/** Handle outgoing packet event
+	 * @param line   pointer to this struct line */
+	void (*cmd_out)(int, short, void *line);
 
-	stats *stats;                    /** statistics db */
-	stats *linkstats;                /** link statistics db */
+	/** Handle incoming packet
+	 * @param pkt    the captured packet */
+	void (*cmd_in)(struct sniff_pkt *pkt);
+
+	void *prv;                       /**< command private data */
+
+	stats *stats;                    /**< statistics db */
+	stats *linkstats;                /**< link statistics db */
 };
 
 /** Represents network interface */
 struct interface {
-	struct mg *mg;             /** root */
-	const char *name;          /** interface name */
-	int num;                   /** interface number */
-	int fd;                    /** raw interface socket */
-	struct event evread;       /** read event */
+	struct mg *mg;             /**< root */
+	const char *name;          /**< interface name */
+	int num;                   /**< interface number */
+	int fd;                    /**< raw interface socket */
+	struct event evread;       /**< read event */
 
-	stats *stats;              /** statistics */
-	thash *linkstats_root;     /** link statistics dbs: "srcid-dstid" -> stats *linkstats */
+	stats *stats;              /**< statistics */
+	thash *linkstats_root;     /**< link statistics dbs: "srcid-dstid" -> stats *linkstats */
 
-	FILE *dumpfile;            /** dump file */
+	FILE *dumpfile;            /**< packet dump file */
 };
 
 /** A function which does statistics aggregation
@@ -158,12 +171,12 @@ typedef bool (*stats_writer_handler_t)(struct mg *mg, stats *stats, void *arg);
 /** Represents process of aggregation of statistics from many single sources and writing them to a
  * statistics file */
 struct stats_writer {
-	stats_writer_handler_t handler;      /** callback handler */
-	void *arg;                           /** argument to pass to handler */
-	tlist *columns;                      /** column names to export */
-	const char *dirname;                 /** optional directory under main stats dir */
-	const char *filename;                /** stats file name */
-	FILE *fh;                            /** open file handle */
+	stats_writer_handler_t handler;      /**< callback handler */
+	void *arg;                           /**< argument to pass to handler */
+	tlist *columns;                      /**< column names to export */
+	const char *dirname;                 /**< optional directory under main stats dir */
+	const char *filename;                /**< stats file name */
+	FILE *fh;                            /**< open file handle */
 };
 
 /** Incoming frame callback type
@@ -172,132 +185,132 @@ typedef void (*mgi_packet_cb)(struct sniff_pkt *pkt);
 
 /** Main data structure, root for all data */
 struct mg {
-	mmatic *mm;                /** global memory manager */
-	mmatic *mmtmp;             /** mm that can be freed anytime in main() */
+	mmatic *mm;                /**< global memory manager */
+	mmatic *mmtmp;             /**< mm that can be freed anytime in main() */
 
-	struct event_base *evb;    /** libevent base */
-	struct schedule hbs;       /** heartbeat schedule info */
-	struct schedule syncs;     /** sync() schedule info */
+	struct event_base *evb;    /**< libevent base */
+	struct schedule hbs;       /**< heartbeat schedule info */
+	struct schedule syncs;     /**< sync() schedule info */
 
-	bool master;               /** true if this node is sync master */
-	bool sender;               /** true if node has packets to send */
-	bool receiver;             /** true if node should receive packets */
+	bool master;               /**< true if this node is sync master */
+	bool sender;               /**< true if node has packets to send */
+	bool receiver;             /**< true if node should receive packets */
 
-	bool synced;               /** true if origin is valid */
-	struct timeval origin;     /** time origin (same on all nodes) */
+	bool synced;               /**< true if origin is valid */
+	struct timeval origin;     /**< time origin (same on all nodes) */
 
 	/** command line options */
 	struct {
-		uint8_t myid;           /** my id number */
-		const char *traf_file;  /** traffic file path */
-		const char *conf_file;  /** config file path */
+		uint8_t myid;           /**< my id number */
+		const char *traf_file;  /**< traffic file path */
+		const char *conf_file;  /**< config file path */
 
-		uint32_t stats;         /** time between stats write [s] */
-		const char *stats_root; /** stats root directory */
-		const char *stats_sess; /** stats session name */
-		uint16_t sync;          /** sync time [s] */
-		bool world;             /** make stats dirs 0777 and files 0666 */
+		uint32_t stats;         /**< time between stats write [s] */
+		const char *stats_root; /**< stats root directory */
+		const char *stats_sess; /**< stats session name */
+		uint16_t sync;          /**< sync time [s] */
+		bool world;             /**< make stats dirs 0777 and files 0666 */
 
-		bool dump;              /** dump raw frames to disk */
-		int dumpsize;           /** max size of dumped frames */
-		bool dumpb;             /** include beacons in dump files */
+		bool dump;              /**< dump raw frames to disk */
+		int dumpsize;           /**< max size of dumped frames */
+		bool dumpb;             /**< include beacons in dump files */
 
-		const char *svc_ifname; /** name of service network interface */
+		const char *svc_ifname; /**< name of service network interface */
 	} options;
 
 	/** interfaces - see interface.c */
 	struct interface interface[IFINDEX_MAX];
-	mgi_packet_cb packet_cb;   /** handler for incoming frames */
+	mgi_packet_cb packet_cb;   /**< handler for incoming frames */
 
 	/** traffic file lines (NB: sparse) */
 	struct line *lines[TRAFFIC_LINE_MAX];
 
 	/* hearbeat */
-	int running;               /** number of still "running" lines */
-	struct timeval last;       /** time of last frame destined to us */
+	int running;               /**< number of still "running" lines */
+	struct timeval last;       /**< time of last frame destined to us */
 
 	/* stats */
-	struct event statsev;      /** stats write event */
-	const char *stats_dir;     /** final stats dir path */
-	tlist *stats_writers;      /** tlist of struct stats_writer */
+	struct event statsev;      /**< stats write event */
+	const char *stats_dir;     /**< final stats dir path */
+	tlist *stats_writers;      /**< tlist of struct stats_writer */
 
-	stats *stats;              /** global iitis-generator statistics */
+	stats *stats;              /**< global iitis-generator statistics */
 };
 
 /** mg frame format */
 struct mg_hdr {
-	uint32_t mg_tag;           /** mg protocol tag */
+	uint32_t mg_tag;           /**< mg protocol tag */
 #define MG_TAG_V1 0xFEEEED01
 
-	uint32_t time_s;           /** local time: seconds */
-	uint32_t time_us;          /** local time: microseconds */
-	uint32_t line_num;         /** traffic file line number */
-	uint32_t line_ctr;         /** counter inside this single line */
+	uint32_t time_s;           /**< local time: seconds */
+	uint32_t time_us;          /**< local time: microseconds */
+	uint32_t line_num;         /**< traffic file line number */
+	uint32_t line_ctr;         /**< counter inside this single line */
 };
 
 /** Received packet info */
 struct sniff_pkt {
-	struct interface *interface;  /** interface packet arrived on */
-	uint8_t pkt[PKT_BUFSIZE];     /** raw frame */
-	int len;                      /** length of raw frame */
-	bool dupe;                    /** if 1, its a duplicate */
+	struct interface *interface;  /**< interface packet arrived on */
+	uint8_t pkt[PKT_BUFSIZE];     /**< raw frame */
+	int len;                      /**< length of raw frame */
+	bool dupe;                    /**< if 1, its a duplicate */
 
 	struct {
-		uint64_t tsft;            /** time [us] */
+		uint64_t tsft;            /**< time [us] */
 		struct {
-			uint8_t val;          /** radiotap flags value */
-			bool    cfp;          /** frame received during Contention-Free Period */
-			bool    shortpre;     /** short preamble */
-			bool    frag;         /** fragmented */
-			bool    badfcs;       /** bad FCS */
+			uint8_t val;          /**< radiotap flags value */
+			bool    cfp;          /**< frame received during Contention-Free Period */
+			bool    shortpre;     /**< short preamble */
+			bool    frag;         /**< fragmented */
+			bool    badfcs;       /**< bad FCS */
 		} flags;
-		uint8_t  rate;            /** bitrate in 0.5 Mbps */
-		uint16_t freq;            /** frequency in MHz */
-		int8_t   rssi;            /** signal strength in dBm */
-		uint8_t  antnum;          /** antenna number */
+		uint8_t  rate;            /**< bitrate in 0.5 Mbps */
+		uint16_t freq;            /**< frequency in MHz */
+		int8_t   rssi;            /**< signal strength in dBm */
+		uint8_t  antnum;          /**< antenna number */
 	} radio;
 
-	struct timeval timestamp;     /** local frame timestamp */
-	uint8_t srcid;                /** source id */
-	uint8_t dstid;                /** destination id */
-	uint16_t size;                /** total packet size (without radiotap) */
-	struct mg_hdr mg_hdr;         /** CPU-endian mg header */
+	struct timeval timestamp;     /**< local frame timestamp */
+	uint8_t srcid;                /**< source id */
+	uint8_t dstid;                /**< destination id */
+	uint16_t size;                /**< total packet size (without radiotap) */
+	struct mg_hdr mg_hdr;         /**< CPU-endian mg header */
 
-	uint8_t *payload;             /** payload after mg header */
-	uint32_t paylen;              /** payload length */
+	uint8_t *payload;             /**< payload after mg header */
+	uint32_t paylen;              /**< payload length */
 
-	struct line *line;            /** matching line */
+	struct line *line;            /**< matching line */
 };
 
 /** message sent during time synchronization phase */
 struct mg_sync_hdr {
-	uint32_t code;                /** code */
+	uint32_t code;                /**< code */
 #define MG_SYNC_OFFER 0x12340000
 #define MG_SYNC_ACK   0xBAAABAAA
 
-	uint8_t  node;                /** source node */
-	uint32_t try;                 /** try number */
-	uint32_t time_s;              /** start time: seconds */
-	uint32_t time_us;             /** start time: microseconds */
+	uint8_t  node;                /**< source node */
+	uint32_t try;                 /**< try number */
+	uint32_t time_s;              /**< start time: seconds */
+	uint32_t time_us;             /**< start time: microseconds */
 };
 
 /** structure used during synchronization phase */
 struct mg_sync {
-	struct mg *mg;                /** data root */
-	struct mg_sync_hdr hdr;       /** last sync packet */
-	int s;                        /** socket */
+	struct mg *mg;                /**< data root */
+	struct mg_sync_hdr hdr;       /**< last sync packet */
+	int s;                        /**< socket */
 
-	struct event_base *evb;       /** event base */
-	struct event evr;             /** read event */
-	struct event evt;             /** timeout event */
+	struct event_base *evb;       /**< event base */
+	struct event evr;             /**< read event */
+	struct event evt;             /**< timeout event */
 
-	uint8_t node_min;             /** lowest node id */
-	uint8_t node_max;             /** highest node id */
-	uint32_t node_count;          /** number of nodes */
-	uint8_t *exist;               /** 0 = nonexistent, 1 = exists */
-	uint8_t *senders;             /** 1 = sends packets */
-	uint8_t *receivers;           /** 1 = receives packets */
-	uint8_t *acked;               /** 1 = node acked to time offer (used at master) */
+	uint8_t node_min;             /**< lowest node id */
+	uint8_t node_max;             /**< highest node id */
+	uint32_t node_count;          /**< number of nodes */
+	uint8_t *exist;               /**< 0 = nonexistent, 1 = exists */
+	uint8_t *senders;             /**< 1 = sends packets */
+	uint8_t *receivers;           /**< 1 = receives packets */
+	uint8_t *acked;               /**< 1 = node acked to time offer (used at master) */
 };
 
 

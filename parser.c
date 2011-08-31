@@ -40,6 +40,7 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 
 	ret = mmatic_zalloc(mm, sizeof *ret);
 	ret->args = thash_create_strkey(NULL, mm);
+	ret->mm = mm;
 
 	mapping = tlist_create(NULL, mm);
 	l = mmatic_strdup(mm, line);
@@ -55,7 +56,6 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 	argc = 1;
 	for (argnum = 1; l[i] && (argmax == 0 || argnum <= argmax); argnum++) {
 		arg = mmatic_zalloc(mm, sizeof *arg);
-		arg->mm = mm;
 
 		/* check if the argument has a name= prefix */
 		inq = false;
@@ -164,10 +164,6 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 			arg->fargs = mgp_parse_line(mm, fargs, 0, NULL, errmsg, NULL);
 		} else {
 			arg->isfunc = false;
-
-			/* get other representations */
-			arg->as_float = strtof(arg->as_string, NULL);
-			arg->as_int = arg->as_float;
 		}
 
 		/* store the argument */
@@ -184,31 +180,55 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 	return ret;
 }
 
-int mgp_get_int(struct mgp_line *l, const char *name)
+/*
+ * Fetch
+ */
+
+/** Fetch given argument, creating it if it does not exist */
+static struct mgp_arg *fetch(struct mgp_line *l, const char *name)
 {
-	struct mgp_arg *arg = thash_get(l->args, name);
-	if (!arg)
-		return 0;
-	else if (arg->isfunc)
-		return arg->fptr(arg);
-	else
-		return arg->as_int;
+	struct mgp_arg *arg;
+
+	arg = thash_get(l->args, name);
+	if (!arg) {
+		arg = mmatic_zalloc(l->mm, sizeof *arg);
+		arg->name = mmatic_strdup(l->mm, name);
+		thash_set(l->args, name, arg);
+	}
+
+	return arg;
 }
 
-const char *mgp_get_string(struct mgp_line *l, const char *name)
+struct mgp_arg *mgp_fetch_int(struct mgp_line *l, const char *name, int defval)
 {
-	struct mgp_arg *arg = thash_get(l->args, name);
-	if (!arg)
-		return "";
-	else
-		return arg->as_string;
+	struct mgp_arg *arg = fetch(l, name);
+
+	if (!arg->as_string)
+		arg->as_int = defval;
+	else if (!arg->isfunc)
+		arg->as_int = atoi(arg->as_string);
+
+	return arg;
 }
 
-float mgp_get_float(struct mgp_line *l, const char *name)
+struct mgp_arg *mgp_fetch_string(struct mgp_line *l, const char *name, const char *defval)
 {
-	struct mgp_arg *arg = thash_get(l->args, name);
-	if (!arg)
-		return 0.0;
+	struct mgp_arg *arg = fetch(l, name);
+
+	if (!arg->as_string)
+		arg->as_string = mmatic_strdup(l->mm, defval);
+
+	return arg;
+}
+
+struct mgp_arg *mgp_fetch_float(struct mgp_line *l, const char *name, float defval)
+{
+	struct mgp_arg *arg = fetch(l, name);
+
+	if (!arg->as_string)
+		arg->as_float = defval;
 	else
-		return arg->as_float;
+		arg->as_float = strtof(arg->as_string, NULL);
+
+	return arg;
 }

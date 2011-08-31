@@ -8,48 +8,32 @@
 #include "generator.h"
 #include "schedule.h"
 
-int cmd_packet_init(struct line *line)
+int cmd_packet_init(struct line *line, const char *text)
 {
 	struct mg *mg = line->mg;
-	int i;
 	struct cmd_packet *cp;
+	struct mgp_line *pl;
+	char *errmsg;
 
-	cp = mmatic_zalloc(mg->mm, sizeof(struct cmd_packet));
-
-	/* defaults */
-	cp->len = 100;
-	cp->num = 1;
-	cp->T = 1000;
-	cp->each = 1;
-
-	for (i = 1; i < line->argc; i++) {
-		switch (i) {
-			case 1:
-				cp->len = atoi(line->argv[1]);
-
-				if (cp->len < PKT_TOTAL_OVERHEAD) {
-					dbg(0, "%s: line %d: frame too short (%d < %d)\n",
-						mg->options.traf_file, line->line_num,
-						cp->len, PKT_TOTAL_OVERHEAD);
-					return 2;
-				}
-				break;
-			case 2:
-				cp->num = atoi(line->argv[2]);
-				break;
-			case 3:
-				cp->T = atoi(line->argv[3]) * 1000;
-				break;
-			case 4:
-				cp->each = atoi(line->argv[4]);
-				break;
-		}
+	pl = mgp_parse_line(mg->mm, text, 0, NULL, &errmsg,
+		"len", "num", "T", "burst", NULL);
+	if (!pl) {
+		dbg(0, "%s: line %d: packet: parse error: %s\n",
+			mg->options.traf_file, line->line_num, errmsg);
+		return 1;
 	}
 
-	dbg(11, "line %d: packet initialized with len=%d, num=%d, T=%d\n",
-		line->line_num, cp->len, cp->num, cp->T);
-
+	/* rewrite into struct cmd_packet */
+	cp = mmatic_zalloc(mg->mm, sizeof(struct cmd_packet));
 	line->prv = cp;
+
+	cp->len   = mgp_fetch_int(pl, "len", 100);
+	cp->num   = mgp_fetch_int(pl, "num", 1);
+	cp->T     = mgp_fetch_int(pl, "T", 1000);
+	cp->burst = mgp_fetch_int(pl, "burst", 1);
+
+	cp->num_val = mgp_int(cp->num);
+
 	return 0;
 }
 
@@ -57,15 +41,19 @@ void cmd_packet_out(int fd, short evtype, void *arg)
 {
 	struct line *line = arg;
 	struct cmd_packet *cp = line->prv;
-	uint32_t i;
+	uint32_t i, len, burst;
+
+	burst = mgp_int(cp->burst);
+	len = MAX(PKT_TOTAL_OVERHEAD, mgp_int(cp->len));
 
 	/* send ASAP */
-	for (i = 0; i < cp->each; i++)
-		mgi_send(line, NULL, 0, cp->len);
+	dbg(0, "packet: sending %dB frames in burst of %d\n", len, burst);
+	for (i = 0; i < burst; i++)
+		mgi_send(line, NULL, 0, len);
 
-	/* reschedule */
-	if (cp->num-- > 1)
-		mgs_usleep(line, cp->T);
+	/* reschedule? */
+	if (cp->num_val-- > 1)
+		mgs_usleep(line, mgp_int(cp->T) * 1000);
 	else
 		line->mg->running--;
 }
