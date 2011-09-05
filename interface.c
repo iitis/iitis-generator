@@ -127,7 +127,7 @@ int mgi_inject(struct interface *interface,
 	}
 }
 
-void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
+void mgi_sendto(int dstid, struct line *line, uint8_t *payload, int payload_size, int size)
 {
 	uint8_t pkt[PKT_BUFSIZE];
 	struct mg_hdr *mg_hdr;
@@ -135,12 +135,15 @@ void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size)
 	int i, j, k;
 	struct timeval t1, t2, diff;
 
+	if (dstid == 0)
+		dstid = line->dstid;
+
 	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
 	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->mg->options.myid }};
-	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->dstid }};
+	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, dstid }};
 
 	dbg(5, "sending line %d: %d -> %d size %d\n",
-		line->line_num, line->mg->options.myid, line->dstid, size);
+		line->line_num, line->mg->options.myid, dstid, size);
 
 	gettimeofday(&t1, NULL);
 

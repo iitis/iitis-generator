@@ -38,12 +38,16 @@ int mgi_inject(struct interface *interface,
 /** Send mg frame
  * A high-level interface to mgi_inject(). If payload is NULL or not long enough, its constructed
  * from contents of configuration file line.
+ * @param dstid        destination node; if 0, take line->dstid
  * @param line         traffic file line
  * @param payload      payload, may be NULL
  * @param payload_size bytes available under payload
  * @param size         desired total frame length in air, including all headers,
  *                     that is PKT_TOTAL_OVERHEAD */
-void mgi_send(struct line *line, uint8_t *payload, int payload_size, int size);
+void mgi_sendto(int dstid, struct line *line, uint8_t *payload, int payload_size, int size);
+
+/** Shortcut */
+#define mgi_send(...) mgi_sendto(0, __VA_ARGS__)
 
 /** Get statistics db for given link on given interface
  * @param interface    interface
