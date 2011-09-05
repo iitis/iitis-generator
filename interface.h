@@ -46,9 +46,6 @@ int mgi_inject(struct interface *interface,
  *                     that is PKT_TOTAL_OVERHEAD */
 void mgi_sendto(int dstid, struct line *line, uint8_t *payload, int payload_size, int size);
 
-/** Shortcut */
-#define mgi_send(...) mgi_sendto(0, __VA_ARGS__)
-
 /** Get statistics db for given link on given interface
  * @param interface    interface
  * @param srcid        source node

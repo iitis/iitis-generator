@@ -135,15 +135,12 @@ void mgi_sendto(int dstid, struct line *line, uint8_t *payload, int payload_size
 	int i, j, k;
 	struct timeval t1, t2, diff;
 
-	if (dstid == 0)
-		dstid = line->dstid;
-
 	struct ether_addr bssid  = {{ 0x06, 0xFE, 0xEE, 0xED, 0xFF, interface->num }};
 	struct ether_addr srcmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, line->mg->options.myid }};
-	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, dstid }};
+	struct ether_addr dstmac = {{ 0x06, 0xFE, 0xEE, 0xED, interface->num, dstid ? dstid : line->dstid }};
 
-	dbg(5, "sending line %d: %d -> %d size %d\n",
-		line->line_num, line->mg->options.myid, dstid, size);
+	dbg(5, "sending line %d: %d->%d size %d\n",
+		line->line_num, srcmac.ether_addr_octet[5], dstmac.ether_addr_octet[5], size);
 
 	gettimeofday(&t1, NULL);
 

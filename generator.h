@@ -110,6 +110,7 @@ struct schedule {
 struct line {
 	struct mg *mg;                   /**< root */
 	struct schedule schedule;        /**< scheduler info */
+	bool local;                      /**< true if srcid == myid */
 
 	uint32_t line_num;               /**< line number in traffic file */
 	uint32_t line_ctr;               /**< line counter for sending */

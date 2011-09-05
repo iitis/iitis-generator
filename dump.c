@@ -34,6 +34,8 @@ void mgd_dump(struct sniff_pkt *pkt)
 		if (!fp) {
 			dbg(0, "cant dump frames: writing to '%s' failed\n", dumpfile);
 			return;
+		} else {
+			dbg(1, "dumping %s frames to %s\n", interface->name, dumpfile);
 		}
 
 		interface->dumpfile = fp;

@@ -307,7 +307,7 @@ static bool find_line_cmd(struct line *line)
 	if (!ptr2func.ptr)
 		return false;
 	else
-		line->cmd_in = ptr2func.fun_packet;
+		line->cmd_packet = ptr2func.fun_packet;
 
 	return true;
 }
@@ -386,6 +386,8 @@ static int parse_traffic(struct mg *mg)
 		/* src/dst */
 		line->srcid = mgp_get_int(pl, "src", 1);
 		line->dstid = mgp_get_int(pl, "dst", 1);
+
+		line->local = (line->srcid == mg->options.myid);
 		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
 
 		/* rate/noack */
@@ -607,6 +609,9 @@ int main(int argc, char *argv[])
 		mgs_sleep(mg->lines[i], NULL);
 		mg->running++;
 	}
+
+	/* suppose last frame was received now */
+	gettimeofday(&mg->last, NULL);
 
 	/*
 	 * start!

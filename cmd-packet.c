@@ -46,7 +46,7 @@ void cmd_packet_timeout(int fd, short evtype, void *arg)
 
 	/* send ASAP */
 	for (i = 0; i < burst; i++)
-		mgi_send(line, NULL, 0, len);
+		mgi_sendto(0, line, NULL, 0, len);
 
 	/* reschedule? */
 	if (cp->num-- > 1)
