@@ -199,7 +199,7 @@ static struct mgp_arg *fetch(struct mgp_line *l, const char *name)
 	return arg;
 }
 
-struct mgp_arg *mgp_fetch_int(struct mgp_line *l, const char *name, int defval)
+struct mgp_arg *mgp_prepare_int(struct mgp_line *l, const char *name, int defval)
 {
 	struct mgp_arg *arg = fetch(l, name);
 
@@ -211,7 +211,7 @@ struct mgp_arg *mgp_fetch_int(struct mgp_line *l, const char *name, int defval)
 	return arg;
 }
 
-struct mgp_arg *mgp_fetch_string(struct mgp_line *l, const char *name, const char *defval)
+struct mgp_arg *mgp_prepare_string(struct mgp_line *l, const char *name, const char *defval)
 {
 	struct mgp_arg *arg = fetch(l, name);
 
@@ -221,7 +221,7 @@ struct mgp_arg *mgp_fetch_string(struct mgp_line *l, const char *name, const cha
 	return arg;
 }
 
-struct mgp_arg *mgp_fetch_float(struct mgp_line *l, const char *name, float defval)
+struct mgp_arg *mgp_prepare_float(struct mgp_line *l, const char *name, float defval)
 {
 	struct mgp_arg *arg = fetch(l, name);
 

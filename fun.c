@@ -6,7 +6,7 @@ int fun_const(struct mgp_arg *arg)
 	struct mgp_arg *v;
 
 	if (!arg->fdata) {
-		v = mgp_fetch_int(arg->fargs, "arg1", 1);
+		v = mgp_prepare_int(arg->fargs, "arg1", 1);
 		arg->fdata = v;
 	} else v = arg->fdata;
 
@@ -29,8 +29,8 @@ int fun_uniform(struct mgp_arg *arg)
 		d = mmatic_zalloc(arg->line->mm, sizeof *d);
 		arg->fdata = d;
 
-		d->from = mgp_fetch_int(arg->fargs, "arg1", 1);
-		d->to   = mgp_fetch_int(arg->fargs, "arg2", 100);
+		d->from = mgp_prepare_int(arg->fargs, "arg1", 1);
+		d->to   = mgp_prepare_int(arg->fargs, "arg2", 100);
 
 		/* initialize random number generator */
 		srand48(time(NULL));

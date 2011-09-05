@@ -47,17 +47,17 @@ struct mgp_line *mgp_parse_line(
 /** Fetch an integer argument
  * Ensures given argument is defined. If not, sets it to a default value.
  * @param defval   set value to defval if argument not specified */
-struct mgp_arg *mgp_fetch_int(struct mgp_line *l, const char *name, int defval);
+struct mgp_arg *mgp_prepare_int(struct mgp_line *l, const char *name, int defval);
 
 /** Fetch a string argument
- * @see mgp_fetch_int()
+ * @see mgp_prepare_int()
  * @param defval   use a strdup of defval if argument not specified */
-struct mgp_arg *mgp_fetch_string(struct mgp_line *l, const char *name, const char *defval);
+struct mgp_arg *mgp_prepare_string(struct mgp_line *l, const char *name, const char *defval);
 
 /** Fetch a float argument
- * @see mgp_fetch_int()
+ * @see mgp_prepare_int()
  * @param defval   set value to defval if argument not specified */
-struct mgp_arg *mgp_fetch_float(struct mgp_line *l, const char *name, float defval);
+struct mgp_arg *mgp_prepare_float(struct mgp_line *l, const char *name, float defval);
 
 /** Get the actual value of an integer argument
  * @note Supports functions */
@@ -70,12 +70,12 @@ static inline char *mgp_string(struct mgp_arg *arg) { return arg->as_string; }
 static inline float mgp_float(struct mgp_arg *arg) { return arg->as_float; }
 
 /** Shortcut */
-#define mgp_get_int(l, name, defval) mgp_int(mgp_fetch_int(l, name, defval))
+#define mgp_get_int(l, name, defval) mgp_int(mgp_prepare_int(l, name, defval))
 
 /** Shortcut */
-#define mgp_get_string(l, name, defval) mgp_string(mgp_fetch_string(l, name, defval))
+#define mgp_get_string(l, name, defval) mgp_string(mgp_prepare_string(l, name, defval))
 
 /** Shortcut */
-#define mgp_get_float(l, name, defval) mgp_float(mgp_fetch_float(l, name, defval))
+#define mgp_get_float(l, name, defval) mgp_float(mgp_prepare_float(l, name, defval))
 
 #endif
