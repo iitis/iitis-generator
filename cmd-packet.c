@@ -16,7 +16,7 @@ int cmd_packet_init(struct line *line, const char *text)
 	char *errmsg;
 
 	pl = mgp_parse_line(mg->mm, text, 0, NULL, &errmsg,
-		"len", "num", "T", "burst", NULL);
+		"size", "rep", "T", "burst", NULL);
 	if (!pl) {
 		dbg(0, "%s: line %d: packet: parse error: %s\n",
 			mg->options.traf_file, line->line_num, errmsg);
@@ -27,8 +27,8 @@ int cmd_packet_init(struct line *line, const char *text)
 	cp = mmatic_zalloc(mg->mm, sizeof(struct cmd_packet));
 	line->prv = cp;
 
-	cp->len   = mgp_fetch_int(pl, "len", 100);
-	cp->num   = mgp_int(mgp_fetch_int(pl, "num", 1));
+	cp->len   = mgp_fetch_int(pl, "size", 100);
+	cp->num   = mgp_int(mgp_fetch_int(pl, "rep", 1));
 	cp->T     = mgp_fetch_int(pl, "T", 1000);
 	cp->burst = mgp_fetch_int(pl, "burst", 1);
 
