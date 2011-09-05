@@ -327,7 +327,6 @@ static int parse_traffic(struct mg *mg)
 	int i, rc;
 	char *rest, *errmsg;
 	struct mgp_line *pl;
-	struct mgp_arg *arg;
 	char *s;
 
 	file = mg->options.traf_file;
@@ -363,8 +362,7 @@ static int parse_traffic(struct mg *mg)
 		line->stats = stats_create(mg->mm);
 
 		/* time */
-		arg = mgp_fetch_string(pl, "time", 0);
-		s = mgp_string(arg);
+		s = mgp_get_string(pl, "time", "0");
 		line->tv.tv_sec = atoi(s);
 		for (i = 0; s[i]; i++) {
 			if (s[i] == '.') {
@@ -374,8 +372,7 @@ static int parse_traffic(struct mg *mg)
 		}
 
 		/* interface */
-		arg = mgp_fetch_int(pl, "intnum", 0);
-		i = mgp_int(arg);
+		i = mgp_get_int(pl, "intnum", 0);
 		if (i >= IFINDEX_MAX) {
 			dbg(0, "%s: line %d: too big interface number: %d\n", file, line_num, i);
 			return 1;
@@ -387,26 +384,18 @@ static int parse_traffic(struct mg *mg)
 		}
 
 		/* src/dst */
-		arg = mgp_fetch_int(pl, "src", 1);
-		line->srcid = mgp_int(arg);
-
-		arg = mgp_fetch_int(pl, "dst", 1);
-		line->dstid = mgp_int(arg);
-
+		line->srcid = mgp_get_int(pl, "src", 1);
+		line->dstid = mgp_get_int(pl, "dst", 1);
 		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
 
 		/* rate/noack */
-		arg = mgp_fetch_float(pl, "rate", 0);  /* NB: "auto" => 0 */
-		line->rate = mgp_float(arg) * 2;       /* driver uses "half-rates" */
-
-		arg = mgp_fetch_int(pl, "noack", 0);
-		line->noack = mgp_int(arg);
+		line->rate = mgp_get_float(pl, "rate", 0) * 2.0;  /* driver uses "half-rates"; NB: "auto" => 0 */
+		line->noack = mgp_get_int(pl, "noack", 0);
 
 		/*
 		 * command
 		 */
-		arg = mgp_fetch_string(pl, "cmd", "");
-		line->cmd = mgp_string(arg);
+		line->cmd = mgp_get_string(pl, "cmd", "");
 		if (!line->cmd) {
 			dbg(0, "%s: line %d: no line command\n", file, line_num);
 			return 2;

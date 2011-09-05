@@ -11,6 +11,7 @@ struct mgp_line {
 
 /** Argument value */
 struct mgp_arg {
+	struct mgp_line *line;             /**< parent */
 	const char *name;                  /**< argument name */
 
 	char *as_string;                   /**< value as string */
@@ -43,20 +44,38 @@ struct mgp_line *mgp_parse_line(
 	...                  /**< [in] optional mapping of argc->name, end with NULL */
 );
 
-
-/** Fetch argument as integer
+/** Fetch an integer argument
+ * Ensures given argument is defined. If not, sets it to a default value.
  * @param defval   set value to defval if argument not specified */
 struct mgp_arg *mgp_fetch_int(struct mgp_line *l, const char *name, int defval);
 
-/** Fetch argument as string
+/** Fetch a string argument
+ * @see mgp_fetch_int()
  * @param defval   use a strdup of defval if argument not specified */
 struct mgp_arg *mgp_fetch_string(struct mgp_line *l, const char *name, const char *defval);
 
-/** Fetch argument as float value */
+/** Fetch a float argument
+ * @see mgp_fetch_int()
+ * @param defval   set value to defval if argument not specified */
 struct mgp_arg *mgp_fetch_float(struct mgp_line *l, const char *name, float defval);
 
-#define mgp_int(arg)    (arg->isfunc ? arg->fptr(arg) : arg->as_int)
-#define mgp_string(arg) (arg->as_string)
-#define mgp_float(arg)  (arg->as_float)
+/** Get the actual value of an integer argument
+ * @note Supports functions */
+static inline int mgp_int(struct mgp_arg *arg) { return arg->isfunc ? arg->fptr(arg) : arg->as_int; }
+
+/** Get the actual value of a string argument */
+static inline char *mgp_string(struct mgp_arg *arg) { return arg->as_string; }
+
+/** Get the actual value of a float argument */
+static inline float mgp_float(struct mgp_arg *arg) { return arg->as_float; }
+
+/** Shortcut */
+#define mgp_get_int(l, name, defval) mgp_int(mgp_fetch_int(l, name, defval))
+
+/** Shortcut */
+#define mgp_get_string(l, name, defval) mgp_string(mgp_fetch_string(l, name, defval))
+
+/** Shortcut */
+#define mgp_get_float(l, name, defval) mgp_float(mgp_fetch_float(l, name, defval))
 
 #endif

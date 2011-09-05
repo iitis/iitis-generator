@@ -28,11 +28,9 @@ int cmd_packet_init(struct line *line, const char *text)
 	line->prv = cp;
 
 	cp->len   = mgp_fetch_int(pl, "len", 100);
-	cp->num   = mgp_fetch_int(pl, "num", 1);
+	cp->num   = mgp_int(mgp_fetch_int(pl, "num", 1));
 	cp->T     = mgp_fetch_int(pl, "T", 1000);
 	cp->burst = mgp_fetch_int(pl, "burst", 1);
-
-	cp->num_val = mgp_int(cp->num);
 
 	return 0;
 }
@@ -44,15 +42,14 @@ void cmd_packet_out(int fd, short evtype, void *arg)
 	uint32_t i, len, burst;
 
 	burst = mgp_int(cp->burst);
-	len = MAX(PKT_TOTAL_OVERHEAD, mgp_int(cp->len));
+	len = mgp_int(cp->len);
 
 	/* send ASAP */
-	dbg(0, "packet: sending %dB frames in burst of %d\n", len, burst);
 	for (i = 0; i < burst; i++)
 		mgi_send(line, NULL, 0, len);
 
 	/* reschedule? */
-	if (cp->num_val-- > 1)
+	if (cp->num-- > 1)
 		mgs_usleep(line, mgp_int(cp->T) * 1000);
 	else
 		line->mg->running--;

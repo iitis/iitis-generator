@@ -247,30 +247,25 @@ void mgc_sync(struct mg *mg)
 	}
 
 	mgs.evb = event_base_new();
-	mgs.exist = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
-	mgs.senders = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
-	mgs.receivers = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
+	mgs.exist = mmatic_zalloc(mg->mmtmp, NODE_MAX + 1);
 	mgs.acked = mmatic_zalloc(mg->mmtmp, mgs.node_max + 1);
 
-	/* create .exist, .senders and .receivers arrays */
+	/* create .exist array */
 	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
 		if (!mg->lines[i])
 			continue;
 
-		if (!mgs.senders[mg->lines[i]->srcid]) {
+		if (!mgs.exist[mg->lines[i]->srcid]) {
 			mgs.exist[mg->lines[i]->srcid] = 1;
-			mgs.senders[mg->lines[i]->srcid] = 1;
 			mgs.node_count++;
 		}
-
-		if (!mgs.receivers[mg->lines[i]->dstid]) {
+		if (!mgs.exist[mg->lines[i]->dstid]) {
 			mgs.exist[mg->lines[i]->dstid] = 1;
-			mgs.receivers[mg->lines[i]->dstid] = 1;
 			mgs.node_count++;
 		}
 	}
 
-	/* include senders, receivers and both */
+	/* take lowest id as master */
 	if (mg->options.myid == mgs.node_min) { /* master */
 		mg->master = true;
 		_master(&mgs);
@@ -279,11 +274,6 @@ void mgc_sync(struct mg *mg)
 	} else {
 		dbg(0, "Not in traffic file - not syncing\n");
 	}
-
-	if (mgs.senders[mg->options.myid])
-		mg->sender = true;
-	if (mgs.receivers[mg->options.myid])
-		mg->receiver = true;
 
 	event_base_free(mgs.evb);
 }

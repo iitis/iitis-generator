@@ -14,14 +14,14 @@
 #define IFNAME_FMT "mon%d"
 #define IFINDEX_MAX 8
 
+/** max node id */
+#define NODE_MAX 255
+
 /** default service network interface */
 #define DEFAULT_SVC_IFNAME "eth0"
 
 /** port to use on service network */
 #define SVC_PORT 31337
-
-/** max number of arguments to command in a traffic file line */
-#define LINE_ARGS_MAX 8
 
 /** size of a buffer for frames */
 #define PKT_BUFSIZE 1600
@@ -118,7 +118,7 @@ struct line {
 	const char *contents;            /**< line contents */
 	struct timeval tv;               /**< time of first packet (time anchor) */
 	struct interface *interface;     /**< interface number */
-	uint8_t srcid;                   /**< src id */
+	uint8_t srcid;                   /**< src id (keep in sync with NODE_MAX) */
 	uint8_t dstid;                   /**< dst id */
 	uint8_t rate;                    /**< bitrate [in 0.5Mbps] or 0 for "auto" */
 	bool    noack;                   /**< no ACK? */
@@ -193,8 +193,6 @@ struct mg {
 	struct schedule syncs;     /**< sync() schedule info */
 
 	bool master;               /**< true if this node is sync master */
-	bool sender;               /**< true if node has packets to send */
-	bool receiver;             /**< true if node should receive packets */
 
 	bool synced;               /**< true if origin is valid */
 	struct timeval origin;     /**< time origin (same on all nodes) */
@@ -308,8 +306,6 @@ struct mg_sync {
 	uint8_t node_max;             /**< highest node id */
 	uint32_t node_count;          /**< number of nodes */
 	uint8_t *exist;               /**< 0 = nonexistent, 1 = exists */
-	uint8_t *senders;             /**< 1 = sends packets */
-	uint8_t *receivers;           /**< 1 = receives packets */
 	uint8_t *acked;               /**< 1 = node acked to time offer (used at master) */
 };
 

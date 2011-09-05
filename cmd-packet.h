@@ -11,11 +11,10 @@
 
 struct cmd_packet {
 	struct mgp_arg *len;         /**< frame length */
-	struct mgp_arg *num;         /**< number of repetitions left */
+	int num;                     /**< number of repetitions left */
 	struct mgp_arg *T;           /**< time interval between repetitions [ms] */
 	struct mgp_arg *burst;       /**< number of frames to send in one repetition */
 
-	uint32_t num_val;     /**< value of "num" at initialization */
 	uint32_t last_ctr;    /**< last ctr value */
 };
 

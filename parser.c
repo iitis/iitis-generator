@@ -56,6 +56,7 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 	argc = 1;
 	for (argnum = 1; l[i] && (argmax == 0 || argnum <= argmax); argnum++) {
 		arg = mmatic_zalloc(mm, sizeof *arg);
+		arg->line = ret;
 
 		/* check if the argument has a name= prefix */
 		inq = false;
@@ -139,7 +140,6 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 		}
 
 		/* XXX: now argument name is in arg->name and its value in arg->as_string */
-		dbg(0, "arg name=%s val='%s'\n", arg->name, arg->as_string);
 
 		/* check if is a function */
 		if (pjf_match("/^[^ ]+\\(.*\\)$/", arg->as_string) > 0) {
