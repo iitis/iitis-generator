@@ -22,9 +22,9 @@ struct cmd_packet {
 int cmd_packet_init(struct line *line, const char *text);
 
 /** Handle outgoing packet */
-void cmd_packet_out(int fd, short evtype, void *arg);
+void cmd_packet_timeout(int fd, short evtype, void *arg);
 
 /** Handle incoming packet */
-void cmd_packet_in(struct sniff_pkt *pkt);
+void cmd_packet_packet(struct sniff_pkt *pkt);
 
 #endif

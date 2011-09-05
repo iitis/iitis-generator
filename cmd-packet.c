@@ -35,7 +35,7 @@ int cmd_packet_init(struct line *line, const char *text)
 	return 0;
 }
 
-void cmd_packet_out(int fd, short evtype, void *arg)
+void cmd_packet_timeout(int fd, short evtype, void *arg)
 {
 	struct line *line = arg;
 	struct cmd_packet *cp = line->prv;
@@ -55,7 +55,7 @@ void cmd_packet_out(int fd, short evtype, void *arg)
 		line->mg->running--;
 }
 
-void cmd_packet_in(struct sniff_pkt *pkt)
+void cmd_packet_packet(struct sniff_pkt *pkt)
 {
 	struct cmd_packet *cp = pkt->line->prv;
 

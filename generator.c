@@ -275,8 +275,8 @@ static bool find_line_cmd(struct line *line)
 	static union {
 		void *ptr;
 		int (*fun_init)(struct line *, const char *);
-		void (*fun_out)(int, short, void *);
-		void (*fun_in)(struct sniff_pkt *);
+		void (*fun_timeout)(int, short, void *);
+		void (*fun_packet)(struct sniff_pkt *);
 	} ptr2func;
 
 	if (!me)
@@ -292,22 +292,22 @@ static bool find_line_cmd(struct line *line)
 		line->cmd_init = ptr2func.fun_init;
 
 	/* outgoing frames */
-	snprintf(buf, sizeof buf, "cmd_%s_out", line->cmd);
+	snprintf(buf, sizeof buf, "cmd_%s_timeout", line->cmd);
 	ptr2func.ptr = dlsym(me, buf);
 
 	if (!ptr2func.ptr)
 		return false;
 	else
-		line->cmd_out = ptr2func.fun_out;
+		line->cmd_timeout = ptr2func.fun_timeout;
 
 	/* incoming frames */
-	snprintf(buf, sizeof buf, "cmd_%s_in", line->cmd);
+	snprintf(buf, sizeof buf, "cmd_%s_packet", line->cmd);
 	ptr2func.ptr = dlsym(me, buf);
 
 	if (!ptr2func.ptr)
 		return false;
 	else
-		line->cmd_in = ptr2func.fun_in;
+		line->cmd_in = ptr2func.fun_packet;
 
 	return true;
 }
@@ -408,7 +408,7 @@ static int parse_traffic(struct mg *mg)
 		}
 
 		/* initialize scheduler of outgoing frames */
-		mgs_setup(&line->schedule, mg, line->cmd_out, line);
+		mgs_setup(&line->schedule, mg, line->cmd_timeout, line);
 
 		/* call command initializer */
 		rc = line->cmd_init(line, rest);
@@ -474,7 +474,7 @@ static void handle_packet(struct sniff_pkt *pkt)
 {
 	/* TODO: stats? (remember to drop duplicates) */
 
-	pkt->line->cmd_in(pkt);
+	pkt->line->cmd_packet(pkt);
 
 	return;
 }

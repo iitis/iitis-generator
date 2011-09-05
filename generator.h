@@ -134,11 +134,11 @@ struct line {
 
 	/** Handle outgoing packet event
 	 * @param line   pointer to this struct line */
-	void (*cmd_out)(int, short, void *line);
+	void (*cmd_timeout)(int, short, void *line);
 
 	/** Handle incoming packet
 	 * @param pkt    the captured packet */
-	void (*cmd_in)(struct sniff_pkt *pkt);
+	void (*cmd_packet)(struct sniff_pkt *pkt);
 
 	void *prv;                       /**< command private data */
 
