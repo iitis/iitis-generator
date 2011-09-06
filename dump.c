@@ -22,6 +22,9 @@ void mgd_dump(struct sniff_pkt *pkt)
 	if (mg->options.dumpsize) {
 		snaplen = mg->options.dumpsize;
 		inclen = MIN(mg->options.dumpsize, pkt->len);
+	} else {
+		snaplen = 65535;
+		inclen = pkt->len;
 	}
 
 	fp = interface->dumpfile;
