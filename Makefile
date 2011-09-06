@@ -3,7 +3,7 @@ LDFLAGS = -export-dynamic -lpjf -lpcre -levent lib/radiotap.o
 
 ME=iitis-generator
 C_OBJECTS=interface.o generator.o schedule.o sync.o stats.o dump.o parser.o fun.o \
-	cmd-tftp.o cmd-packet.o
+	cmd-ttftp.o cmd-packet.o
 TARGETS=iitis-generator
 
 include rules.mk

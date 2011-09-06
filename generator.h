@@ -110,7 +110,7 @@ struct schedule {
 struct line {
 	struct mg *mg;                   /**< root */
 	struct schedule schedule;        /**< scheduler info */
-	bool local;                      /**< true if srcid == myid */
+	bool my;                         /**< true if srcid == myid */
 
 	uint32_t line_num;               /**< line number in traffic file */
 	uint32_t line_ctr;               /**< line counter for sending */
@@ -143,8 +143,7 @@ struct line {
 
 	void *prv;                       /**< command private data */
 
-	stats *stats;                    /**< statistics db */
-	stats *linkstats;                /**< link statistics db */
+	stats *stats;                    /**< line statistics */
 };
 
 /** Represents network interface */
@@ -156,7 +155,7 @@ struct interface {
 	struct event evread;       /**< read event */
 
 	stats *stats;              /**< statistics */
-	thash *linkstats_root;     /**< link statistics dbs: "srcid-dstid" -> stats *linkstats */
+	thash *linkstats;          /**< link statistics: "srcid-dstid" -> thash *linkstats */
 
 	FILE *dumpfile;            /**< packet dump file */
 };

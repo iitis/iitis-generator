@@ -327,13 +327,11 @@ static int parse_traffic(struct mg *mg)
 	int i, rc;
 	char *rest, *errmsg;
 	struct mgp_line *pl;
-	char *s;
 
 	file = mg->options.traf_file;
 	fp = fopen(file, "r");
-	if (!fp) {
+	if (!fp)
 		reterrno(1, 0, "could not open traffic file");
-	}
 
 	while (fgets(buf, sizeof buf, fp)) {
 		line_num++;
@@ -345,8 +343,8 @@ static int parse_traffic(struct mg *mg)
 			continue;
 
 		/* parse line */
-		pl = mgp_parse_line(mg->mm, buf, 7, &rest, &errmsg,
-			"time", "intnum", "src", "dst", "rate", "noack", "cmd", NULL);
+		pl = mgp_parse_line(mg->mm, buf, 8, &rest, &errmsg,
+			"s", "ms", "iface", "src", "dst", "rate", "noack", "cmd", NULL);
 		if (!pl) {
 			dbg(0, "%s: line %d: parse error: %s\n", file, line_num, errmsg);
 			return 1;
@@ -362,17 +360,11 @@ static int parse_traffic(struct mg *mg)
 		line->stats = stats_create(mg->mm);
 
 		/* time */
-		s = mgp_get_string(pl, "time", "0");
-		line->tv.tv_sec = atoi(s);
-		for (i = 0; s[i]; i++) {
-			if (s[i] == '.') {
-				line->tv.tv_usec = atoi(s + i + 1) * 1000;
-				break;
-			}
-		}
+		line->tv.tv_sec = mgp_get_int(pl, "s", 0);
+		line->tv.tv_usec = mgp_get_int(pl, "ms", 0) * 1000;
 
 		/* interface */
-		i = mgp_get_int(pl, "intnum", 0);
+		i = mgp_get_int(pl, "iface", 0);
 		if (i >= IFINDEX_MAX) {
 			dbg(0, "%s: line %d: too big interface number: %d\n", file, line_num, i);
 			return 1;
@@ -386,9 +378,7 @@ static int parse_traffic(struct mg *mg)
 		/* src/dst */
 		line->srcid = mgp_get_int(pl, "src", 1);
 		line->dstid = mgp_get_int(pl, "dst", 1);
-
-		line->local = (line->srcid == mg->options.myid);
-		line->linkstats = mgi_linkstats_get(line->interface, line->srcid, line->dstid);
+		line->my    = (line->srcid == mg->options.myid);
 
 		/* rate/noack */
 		line->rate = mgp_get_float(pl, "rate", 0) * 2.0;  /* driver uses "half-rates"; NB: "auto" => 0 */
@@ -600,9 +590,7 @@ int main(int argc, char *argv[])
 
 	/* schedule the real work of this node: line generators */
 	for (i = 1; i < TRAFFIC_LINE_MAX; i++) {
-		if (!mg->lines[i])
-			continue;
-		if (mg->lines[i]->srcid != mg->options.myid)
+		if (!(mg->lines[i] && mg->lines[i]->my))
 			continue;
 
 		/* this will schedule first execution */
