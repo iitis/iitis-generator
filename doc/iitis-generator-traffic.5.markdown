@@ -17,26 +17,29 @@ The traffic file is a text file. Each line is a statement and can be treated as 
 traffic generator. The file is common for the whole network. Exemplary few lines below.
 
 	# on time 3.5s, on interface 0, generate a 100B frame from node 7->4
-	3.5  0  7 4   0 0 packet 100
+	3 500  0  7 4   0 0 packet 100
 	
-	# after 0.25s, send 30 frames of size 200B in the opposite direction
-	3.75 0  4 7   0 0 packet 200 30
+	# after 0.25s, send quickly 30 frames of size 200B in the opposite direction
+	3 750 0  4 7   0 0 packet size=200 rep=30 T=10
 	
-	# on time 10.0s, send final, big 7->4 frame with bitrate 54Mbps and no ACK
-	10.0 0  7 4  54 1 packet 1500
+	# on time 10s + random 0-1000 ms, send final, big frame; bitrate 54Mbps and no ACK
+	10 uniform(0,1000) 0  7 4  54 1 packet size=1500
 
-Comments start with a hash (#). Generator lines follow the same syntax:
+Comments start with a hash (#). At most 1000 lines is allowed. Functions can be used as values, e.g.
+in order to obtain a random start moment (see [FUNCTIONS][]).
 
-  *time_s*.*ms* *interface_num* *srcid* *dstid* *rate* *noack?* *command* [*params*...]
+Generator lines follow the following syntax:
+
+  *s* *ms* *interface_num* *srcid* *dstid* *rate* *noack?* *command* [*params*...]
 
 Meaning of line columns:
 
-`1.` `time_s`: start time (integer 0+, s)
+`1.` `s`: start time (integer 0+, seconds)
 
 Time is given in seconds after the whole experiment start moment (which is synchronized across
 all nodes).
 
-`2.` `ms`: start time milisecond fraction (integer 0-999, ms)
+`2.` `ms`: start time milisecond fraction (integer 0-999, miliseconds)
 
 `3.` `interace_num`: interface number (integer 0+)
 
@@ -68,35 +71,60 @@ Use 0 for automatic selection by the driver.
 
 Use either value 0 (enable ACK) or 1 (disable ACK).
 
-`8.` `command`: line command (see [COMMANDS][])
+`8.` `command`: line command (see below)
 
 `9.` `params...`: optional command parameters
 
-Traffic file can have 1000 lines at most.
+Parameters can be either given with their names (e.g. `size=1500`), or without. However, in latter
+case, strict order must be retained.
 
-## COMMANDS
+## THE packet COMMAND
 
-Line command chooses characteristics of the traffic that will be generated with parameters chosen in
-line specification, before the command part.
+The command sends a simple frame, optionally repeated with a time period. Command syntax:
 
-Currently, only one command is supported - `packet` - which sends a simple frame, optionally
-repeated with a fixed time period. Command syntax:
+  *packet* *size=* *rep=* *T=* *burst=*
 
-  *packet* [*len* [*rep* [*T* [*burst*]]]]
+  * `size` :
+  Frame length, default 100B (integer 100-1500).
+  This defines the total frame length in the air, ie. it includes the IEEE 802.11, LLC and
+  `iitis-generator` headers. If there is a remaining space, frame payload is filled with line
+  definition, and repeated until frame is full.
 
-`1.` `len`: frame length, default 100B (integer 100-1500)
+  * `rep` :
+  Number of repetitions, default 1 (integer 1+).
 
-This defines the total frame length in the air, ie. it includes the IEEE 802.11, LLC and
-iitis-generator headers. If there is a remaining space, frame payload is filled with line definition,
-and repeated until frame is full.
+  * `T` :
+  Repetition period in miliseconds, default 1000 (integer 1+).
 
-`2.` `rep`: number of repetitions, default 1 (integer 1+)
+  * `burst` :
+  Number of frames to send in each repetition, default 1 (integer 1+).
 
-`3.` `T`: repetition period, default 1000ms (integer 1+)
+## THE ttftp COMMAND
 
-If `rep` is greater than 1, this defines the time gap between frame repetitions.
+The command mimics the TFTP protocol in a simplified manner. The difference is that file transfer is
+initiated by the server, and the data rate is fixed, regardless any TFTP ACK frames. Syntax:
 
-`4.` `burst`: number of frames to send in a burst for each repetition, default 1 (integer 1+)
+  *ttftp* *size=* *rep=* *T=* *rate=* *MB=*
+
+  * `size`,`rep`,`T` :
+  See [THE packet COMMAND][].
+
+  * `rate` :
+  Data rate, in megabits per second, default 1 (integer 1+).
+
+  * `MB` :
+  Virtual file size, in megabytes, i.e. amount of data to send in single request. Value of 0 means
+  an infinite buffer. Default 1 (integer 1+).
+
+## FUNCTIONS
+
+Following functions are supported:
+
+  * `const(val)`:
+  Generate a constant value of `val`.
+
+  * `uniform(val1, val2)`:
+  Generate a random number in range [`val1`, `val2`] according to uniform distribution.
 
 ## AUTHOR AND COPYRIGHT INFO
 

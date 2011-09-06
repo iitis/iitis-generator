@@ -132,13 +132,13 @@ See iitis-generator-conf(5) for further documentation.
 The <TRAFFIC FILE> is common for the whole network. Exemplary few lines below.
 
 	# on time 3.5s, on interface 0, generate a 100B frame from node 7->4
-	3.5  0  7 4   0 0 packet 100
+	3 500  0  7 4   0 0 packet 100
 	
 	# after 0.25s, send 30 frames of size 200B in the opposite direction
-	3.75 0  4 7   0 0 packet 200 30
+	3 750 0  4 7   0 0 packet 200 30
 	
 	# on time 10.0s, send final, big 7->4 frame with bitrate 54Mbps and no ACK
-	10.0 0  7 4  54 1 packet 1 1500
+	10 0 0  7 4  54 1 packet 1 1500
 
 See iitis-generator-traffic(5) for further documentation.
 
