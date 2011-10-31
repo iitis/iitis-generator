@@ -449,6 +449,7 @@ static void sync_run(int fd, short evtype, void *arg)
 {
 	struct mg *mg = arg;
 
+	fflush(NULL);
 	sync();
 	mgs_uschedule(&mg->syncs, mg->options.sync * 1000000);
 }
@@ -554,6 +555,9 @@ int main(int argc, char *argv[])
 	 * config syntax looks OK, see if it is feasible
 	 */
 
+	/* initialize random number generator */
+	srand48(mg->options.myid);
+
 	/* init libevent */
 	mg->evb = event_init();
 	event_set_log_callback(libevent_log);
@@ -617,6 +621,9 @@ int main(int argc, char *argv[])
 	event_base_free(mg->evb);
 	mmatic_free(mg->mm);
 	mmatic_free(mg->mmtmp);
+
+	fflush(NULL);
+	sync();
 
 	return 0;
 }

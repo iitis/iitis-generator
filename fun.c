@@ -31,9 +31,6 @@ int fun_uniform(struct mgp_arg *arg)
 
 		d->from = mgp_prepare_int(arg->fargs, "arg1", 1);
 		d->to   = mgp_prepare_int(arg->fargs, "arg2", 100);
-
-		/* initialize random number generator */
-		srand48(time(NULL));
 	} else d = arg->fdata;
 
 	base = mgp_int(d->from);
