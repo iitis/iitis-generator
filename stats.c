@@ -16,9 +16,9 @@ static void _stats_writer_free(void *arg)
 	struct stats_writer *sa = arg;
 
 	tlist_free(sa->columns);
-	mmatic_freeptr(sa->filename);
-	mmatic_freeptr(sa->dirname);
-	mmatic_freeptr(sa);
+	mmatic_free(sa->filename);
+	mmatic_free(sa->dirname);
+	mmatic_free(sa);
 }
 
 /** Append statistics line to file */
@@ -152,14 +152,14 @@ void mgstats_start(struct mg *mg)
 	strftime(buf2, sizeof buf2, "%Y.%m.%d-%H:%M:%S", &tm);
 
 	if (mg->options.stats_sess)
-		stats_session_root = mmatic_printf(mg->mmtmp, "%s/%s/%s/%s",
+		stats_session_root = mmatic_sprintf(mg->mmtmp, "%s/%s/%s/%s",
 			mg->options.stats_root, buf1, mg->options.stats_sess, buf2);
 	else
-		stats_session_root = mmatic_printf(mg->mmtmp, "%s/%s/%s",
+		stats_session_root = mmatic_sprintf(mg->mmtmp, "%s/%s/%s",
 			mg->options.stats_root, buf1, buf2);
 
 	/* this node's stats dir */
-	mg->stats_dir = mmatic_printf(mg->mm, "%s/%u", stats_session_root, mg->options.myid);
+	mg->stats_dir = mmatic_sprintf(mg->mm, "%s/%u", stats_session_root, mg->options.myid);
 
 	/* create it or die */
 	if (pjf_mkdir_mode(mg->stats_dir, mg->options.world ? 0777 : 0755) == 0)
@@ -170,7 +170,7 @@ void mgstats_start(struct mg *mg)
 	/* master does special work */
 	if (mg->master) {
 		/* copy traffic file */
-		dest = mmatic_printf(mg->mmtmp, "%s/traffic.txt", stats_session_root);
+		dest = mmatic_sprintf(mg->mmtmp, "%s/traffic.txt", stats_session_root);
 		if (pjf_copyfile(mg->options.traf_file, dest))
 			die("pjf_copyfile() of traffic file failed\n");
 		if (mg->options.world)
@@ -178,7 +178,7 @@ void mgstats_start(struct mg *mg)
 
 		/* copy config file if exists */
 		if (mg->options.conf_file) {
-			dest = mmatic_printf(mg->mmtmp, "%s/generator.conf", stats_session_root);
+			dest = mmatic_sprintf(mg->mmtmp, "%s/generator.conf", stats_session_root);
 			if (pjf_copyfile(mg->options.conf_file, dest))
 				die("pjf_copyfile() of config file failed\n");
 			if (mg->options.world)
@@ -200,7 +200,7 @@ void mgstats_writer_add(struct mg *mg, stats_writer_handler_t handler, void *arg
 	sa->dirname = mmatic_strdup(mg->mm, dir ? dir : "");
 	sa->filename = mmatic_strdup(mg->mm, file);
 
-	sa->columns = tlist_create(mmatic_freeptr, mg->mm);
+	sa->columns = tlist_create(mmatic_free, mg->mm);
 	va_start(va, file);
 	while ((key = va_arg(va, const char *)))
 		tlist_push(sa->columns, mmatic_strdup(mg->mm, key));
@@ -217,7 +217,7 @@ stats *stats_create(mmatic *mm)
 
 	stats = mmatic_zalloc(mm, sizeof *stats);
 	stats->mm = mm;
-	stats->db = thash_create_strkey(mmatic_freeptr, stats->mm);
+	stats->db = thash_create_strkey(mmatic_free, stats->mm);
 
 	return stats;
 }

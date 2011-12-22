@@ -82,7 +82,7 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 			/* get key from mapping */
 			arg->name = tlist_shift(mapping);
 			if (!arg->name) {
-				arg->name = mmatic_printf(mm, "arg%d", argc++);
+				arg->name = mmatic_sprintf(mm, "arg%d", argc++);
 			}
 
 			if (!l[j])
@@ -135,7 +135,7 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 			i = j + 1;
 		} else {
 			if (errmsg)
-				*errmsg = mmatic_printf(mm, "invalid character in argument number %d: '%c'", argnum, l[j]);
+				*errmsg = mmatic_sprintf(mm, "invalid character in argument number %d: '%c'", argnum, l[j]);
 			return NULL;
 		}
 
@@ -155,7 +155,7 @@ struct mgp_line *mgp_parse_line(mmatic *mm, const char *line, int argmax, char *
 			arg->fptr = funcname2ptr(fname);
 			if (!arg->fptr) {
 				if (errmsg)
-					*errmsg = mmatic_printf(mm, "invalid function name in argument number %d: '%s'",
+					*errmsg = mmatic_sprintf(mm, "invalid function name in argument number %d: '%s'",
 						argnum, fname);
 				return NULL;
 			}

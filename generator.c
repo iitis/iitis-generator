@@ -330,8 +330,10 @@ static int parse_traffic(struct mg *mg)
 
 	file = mg->options.traf_file;
 	fp = fopen(file, "r");
-	if (!fp)
-		reterrno(1, 0, "could not open traffic file");
+	if (!fp) {
+		dbg(0, "could not open traffic file: %s: %s\n", file, strerror(errno));
+		return 1;
+	}
 
 	while (fgets(buf, sizeof buf, fp)) {
 		line_num++;
@@ -533,7 +535,7 @@ int main(int argc, char *argv[])
 	 * initialize and parse config
 	 */
 
-	mg = mmzalloc(sizeof(struct mg));
+	mg = mmatic_zalloc(mm, sizeof(struct mg));
 	mg->mm = mm;
 	mg->mmtmp = mmtmp;
 	apply_defaults(mg);

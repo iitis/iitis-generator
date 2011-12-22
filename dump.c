@@ -29,8 +29,8 @@ void mgd_dump(struct sniff_pkt *pkt)
 
 	fp = interface->dumpfile;
 	if (!fp) {
-		dumpdir  = mmatic_printf(mg->mmtmp, "%s/%s", mg->stats_dir, interface->name);
-		dumpfile = mmatic_printf(mg->mmtmp, "%s/dump.pcap", dumpdir);
+		dumpdir  = mmatic_sprintf(mg->mmtmp, "%s/%s", mg->stats_dir, interface->name);
+		dumpfile = mmatic_sprintf(mg->mmtmp, "%s/dump.pcap", dumpdir);
 
 		pjf_mkdir_mode(dumpdir, mg->options.world ? 0777 : 0755);
 		fp = fopen(dumpfile, "w");
